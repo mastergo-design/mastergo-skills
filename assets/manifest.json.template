@@ -1,0 +1,22 @@
+{
+  "_comment": "MasterGo 插件 manifest 配置模板",
+  "_note": "⚠️ MasterGo 和 Figma 的 manifest 格式不同！不要混淆使用",
+
+  "name": "my-plugin",
+  "api": "1.0.0",
+  "main": "./main.js",
+  "ui": "./ui.html",
+
+  "menu": [
+    {
+      "name": "运行",
+      "command": "run"
+    }
+  ],
+
+  "permissions": [],
+
+  "_permissions_note": "MasterGo 的 permissions 是数组格式，例如: [\"currentuser\"]",
+  "_figma_diff_warning": "⚠️ 不要使用 Figma 的 networkAccess 字段！MasterGo 不支持此格式",
+  "_figma_format_example": "Figma 格式示例（仅参考，不要在 MasterGo 中使用）: {\"networkAccess\": {\"allowedDomains\": [\"*\"]}}"
+}

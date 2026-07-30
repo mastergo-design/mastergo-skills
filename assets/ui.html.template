@@ -1,0 +1,356 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我的插件</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      padding: 20px;
+      color: #333;
+      background: #f5f5f5;
+    }
+
+    .container {
+      max-width: 100%;
+    }
+
+    h1 {
+      font-size: 20px;
+      margin-bottom: 20px;
+      color: #333;
+    }
+
+    .section {
+      background: white;
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 16px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .section-title {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #555;
+    }
+
+    .form-group {
+      margin-bottom: 12px;
+    }
+
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      margin-bottom: 4px;
+      color: #666;
+    }
+
+    input[type="number"],
+    input[type="text"] {
+      width: 100%;
+      padding: 8px 12px;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+      font-size: 13px;
+      transition: border-color 0.2s;
+    }
+
+    input[type="number"]:focus,
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #007AFF;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    button {
+      flex: 1;
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    button.primary {
+      background: #007AFF;
+      color: white;
+    }
+
+    button.primary:hover {
+      background: #0051D5;
+    }
+
+    button.secondary {
+      background: #E5E5EA;
+      color: #333;
+    }
+
+    button.secondary:hover {
+      background: #D1D1D6;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .status {
+      padding: 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      margin-top: 8px;
+      display: none;
+    }
+
+    .status.success {
+      background: #E8F5E9;
+      color: #2E7D32;
+      display: block;
+    }
+
+    .status.error {
+      background: #FFEBEE;
+      color: #C62828;
+      display: block;
+    }
+
+    .status.info {
+      background: #E3F2FD;
+      color: #1565C0;
+      display: block;
+    }
+
+    .node-list {
+      list-style: none;
+      max-height: 200px;
+      overflow-y: auto;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+
+    .node-item {
+      padding: 8px 12px;
+      border-bottom: 1px solid #eee;
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .node-item:last-child {
+      border-bottom: none;
+    }
+
+    .node-item:hover {
+      background: #f9f9f9;
+    }
+
+    .node-name {
+      font-weight: 500;
+    }
+
+    .node-type {
+      color: #666;
+      font-size: 11px;
+    }
+
+    .loading {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border: 2px solid #f3f3f3;
+      border-top: 2px solid #007AFF;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-right: 8px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>我的插件</h1>
+
+    <!-- 创建矩形 -->
+    <div class="section">
+      <div class="section-title">创建矩形</div>
+
+      <div class="form-group">
+        <label>宽度</label>
+        <input type="number" id="rect-width" value="100" min="1" />
+      </div>
+
+      <div class="form-group">
+        <label>高度</label>
+        <input type="number" id="rect-height" value="100" min="1" />
+      </div>
+
+      <div class="form-group">
+        <label>X 坐标</label>
+        <input type="number" id="rect-x" value="100" />
+      </div>
+
+      <div class="form-group">
+        <label>Y 坐标</label>
+        <input type="number" id="rect-y" value="100" />
+      </div>
+
+      <div class="button-group">
+        <button class="primary" id="create-rect-btn">创建矩形</button>
+        <button class="secondary" id="get-selected-btn">获取选中节点</button>
+      </div>
+
+      <div id="create-status" class="status"></div>
+    </div>
+
+    <!-- 选中节点列表 -->
+    <div class="section" id="nodes-section" style="display: none;">
+      <div class="section-title">选中的节点</div>
+      <ul class="node-list" id="node-list"></ul>
+    </div>
+  </div>
+
+  <script>
+    // DOM 元素
+    const createRectBtn = document.getElementById('create-rect-btn');
+    const getSelectedBtn = document.getElementById('get-selected-btn');
+    const createStatus = document.getElementById('create-status');
+    const nodesSection = document.getElementById('nodes-section');
+    const nodeList = document.getElementById('node-list');
+
+    // 显示状态消息
+    function showStatus(message, type = 'info') {
+      createStatus.textContent = message;
+      createStatus.className = `status ${type}`;
+
+      // 3秒后自动隐藏
+      setTimeout(() => {
+        createStatus.className = 'status';
+      }, 3000);
+    }
+
+    // 显示加载状态
+    function setLoading(button, isLoading, originalText) {
+      if (isLoading) {
+        button.disabled = true;
+        button.innerHTML = '<span class="loading"></span>处理中...';
+      } else {
+        button.disabled = false;
+        button.textContent = originalText;
+      }
+    }
+
+    // 创建矩形
+    createRectBtn.addEventListener('click', () => {
+      const width = parseInt(document.getElementById('rect-width').value) || 100;
+      const height = parseInt(document.getElementById('rect-height').value) || 100;
+      const x = parseInt(document.getElementById('rect-x').value) || 100;
+      const y = parseInt(document.getElementById('rect-y').value) || 100;
+
+      setLoading(createRectBtn, true, '创建矩形');
+
+      // 发送消息到主线程
+      parent.postMessage({
+        type: 'create-rectangle',
+        options: { width, height, x, y }
+      }, '*');
+    });
+
+    // 获取选中节点
+    getSelectedBtn.addEventListener('click', () => {
+      setLoading(getSelectedBtn, true, '获取选中节点');
+
+      // 发送消息到主线程
+      parent.postMessage({
+        type: 'get-selected-nodes'
+      }, '*');
+    });
+
+    // 监听来自主线程的消息
+    window.onmessage = (event) => {
+      const msg = event.data;
+      console.log('收到主线程消息:', msg);
+
+      switch (msg.type) {
+        case 'success':
+          showStatus(msg.message, 'success');
+          setLoading(createRectBtn, false, '创建矩形');
+          setLoading(getSelectedBtn, false, '获取选中节点');
+          break;
+
+        case 'error':
+          showStatus(msg.message, 'error');
+          setLoading(createRectBtn, false, '创建矩形');
+          setLoading(getSelectedBtn, false, '获取选中节点');
+          break;
+
+        case 'selected-nodes':
+          displaySelectedNodes(msg.nodes);
+          setLoading(getSelectedBtn, false, '获取选中节点');
+          break;
+
+        default:
+          console.warn('未知的消息类型:', msg.type);
+      }
+    };
+
+    // 显示选中的节点列表
+    function displaySelectedNodes(nodes) {
+      nodeList.innerHTML = '';
+
+      if (nodes.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'node-item';
+        li.textContent = '没有选中的节点';
+        nodeList.appendChild(li);
+      } else {
+        nodes.forEach(node => {
+          const li = document.createElement('li');
+          li.className = 'node-item';
+
+          li.innerHTML = `
+            <span class="node-name">${escapeHtml(node.name)}</span>
+            <span class="node-type">${node.type}</span>
+          `;
+
+          nodeList.appendChild(li);
+        });
+      }
+
+      nodesSection.style.display = 'block';
+    }
+
+    // HTML 转义
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    // 初始化：页面加载完成后发送就绪消息
+    window.addEventListener('load', () => {
+      parent.postMessage({ type: 'ui-ready' }, '*');
+    });
+  </script>
+</body>
+</html>
