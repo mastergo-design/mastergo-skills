@@ -1,0 +1,166 @@
+/**
+ * MasterGo 插件主线程代码模板
+ *
+ * 在这个文件中编写插件的主要逻辑：
+ * - 访问和操作 MasterGo 文档节点
+ * - 调用 MasterGo API
+ * - 与 UI 线程通信
+ */
+
+// 显示插件 UI
+mg.showUI(__html__, {
+  width: 400,
+  height: 600
+});
+
+// 监听来自 UI 的消息
+mg.ui.onmessage = (msg) => {
+  console.log('收到 UI 消息:', msg);
+
+  switch (msg.type) {
+    case 'create-rectangle':
+      handleCreateRectangle(msg.options);
+      break;
+
+    case 'get-selected-nodes':
+      handleGetSelectedNodes();
+      break;
+
+    case 'update-node':
+      handleUpdateNode(msg.nodeId, msg.updates);
+      break;
+
+    default:
+      console.warn('未知的消息类型:', msg.type);
+  }
+};
+
+/**
+ * 处理创建矩形
+ */
+function handleCreateRectangle(options?: {
+  width?: number;
+  height?: number;
+  x?: number;
+  y?: number;
+}) {
+  try {
+    // 创建矩形节点
+    const rect = mg.createRectangle();
+
+    // 设置属性
+    if (options) {
+      rect.width = options.width ?? 100;
+      rect.height = options.height ?? 100;
+      rect.x = options.x ?? 100;
+      rect.y = options.y ?? 100;
+    }
+
+    // 设置填充
+    rect.fills = [{
+      type: 'SOLID',
+      color: { r: 1, g: 0, b: 0, a: 1 },
+      opacity: 1
+    }];
+
+    // 提交撤销历史
+    mg.commitUndo();
+
+    // 发送成功消息到 UI
+    mg.ui.postMessage({
+      type: 'success',
+      message: '矩形创建成功',
+      nodeId: rect.id
+    });
+
+    // 显示通知
+    mg.notify('矩形创建成功', { type: 'success' });
+
+  } catch (error) {
+    console.error('创建矩形失败:', error);
+
+    // 发送错误消息到 UI
+    mg.ui.postMessage({
+      type: 'error',
+      message: `创建矩形失败: ${error.message}`
+    });
+
+    // 显示错误通知
+    mg.notify('创建矩形失败', { type: 'error' });
+  }
+}
+
+/**
+ * 获取当前选中的节点
+ */
+function handleGetSelectedNodes() {
+  try {
+    const selection = mg.document.currentPage.selection;
+
+    // 提取节点信息
+    const nodesInfo = selection.map(node => ({
+      id: node.id,
+      name: node.name,
+      type: node.type,
+      x: 'x' in node ? node.x : undefined,
+      y: 'y' in node ? node.y : undefined,
+      width: 'width' in node ? node.width : undefined,
+      height: 'height' in node ? node.height : undefined
+    }));
+
+    // 发送到 UI
+    mg.ui.postMessage({
+      type: 'selected-nodes',
+      nodes: nodesInfo
+    });
+
+  } catch (error) {
+    console.error('获取选中节点失败:', error);
+    mg.notify('获取选中节点失败', { type: 'error' });
+  }
+}
+
+/**
+ * 更新节点属性
+ */
+function handleUpdateNode(nodeId: string, updates: Partial<SceneNode>) {
+  try {
+    const node = mg.getNodeById(nodeId);
+
+    if (!node) {
+      throw new Error(`节点不存在: ${nodeId}`);
+    }
+
+    // 更新属性
+    Object.assign(node, updates);
+
+    // 提交撤销历史
+    mg.commitUndo();
+
+    // 发送成功消息
+    mg.ui.postMessage({
+      type: 'success',
+      message: '节点更新成功',
+      nodeId
+    });
+
+  } catch (error) {
+    console.error('更新节点失败:', error);
+
+    mg.ui.postMessage({
+      type: 'error',
+      message: `更新节点失败: ${error.message}`
+    });
+  }
+}
+
+// 可选：监听事件
+// mg.on('selectionchange', (selection) => {
+//   console.log('选择已变化:', selection);
+// });
+
+// 可选：监听插件关闭事件
+// mg.on('close', () => {
+//   console.log('插件即将关闭');
+//   // 清理资源
+// });
