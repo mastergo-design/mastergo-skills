@@ -39,7 +39,24 @@ const agent = new Agent({
 });
 ```
 
-### 方式三：手动注册（任意 AI 工具）
+### 方式三：通过 LLM 对话一键安装
+
+将以下提示词发送给任意支持 skill 安装的 LLM 工具（如 Claude Code、Cursor 等），即可自动完成安装：
+
+```text
+请帮我安装 MasterGo 插件开发 skill：
+1. 执行命令: mkdir -p ~/.claude/skills && git clone git@github.com:mastergo-design/plugin-develop-skill.git ~/.claude/skills/mastergo-plugin
+2. 确认 ~/.claude/skills/mastergo-plugin/SKILL.md 文件存在且 frontmatter 中包含 name: mastergo-plugin
+3. 安装完成后告诉我已就绪
+```
+
+Claude Code 用户也可以用更简短的方式：
+
+```text
+安装 skill: git@github.com:mastergo-design/plugin-develop-skill.git
+```
+
+### 方式四：手动注册（任意 AI 工具）
 
 将 `SKILL.md` 的 **frontmatter**（`---` 之间的 name / description）和完整内容注入到 AI 工具的 system prompt 或 skill 配置中即可。
 
