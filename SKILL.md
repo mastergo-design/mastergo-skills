@@ -1,7 +1,7 @@
 ---
 name: mastergo-plugin
 description: MasterGo 插件开发与 API 维护一体化 skill。覆盖两类场景：(A) 插件开发——从零创建插件项目结构、mg 全局 API 参考、节点类型、自动布局(flexMode)、组件/样式/团队库/字体/图片、DevMode 代码生成、UI 通信、调试与最佳实践；(B) 插件 API 变更同步——当 API 新增/修改/废弃时，按顺序跨三仓库更新 plugin-typings 类型发布 + mastergo-plugin-docs 开发者文档 + master-internal-plugins E2E 单测。触发词：mastergo 插件开发、插件 API、plugin api update、更新插件类型、更新插件文档、补充插件单测、同步插件 API、插件 API 变更、devmode 代码生成、mg.createFrame、flexMode 自动布局。
-version: 0.5.0
+version: 0.6.0
 ---
 
 # MasterGo 插件开发与 API 维护
@@ -973,6 +973,59 @@ await mg.loadFontAsync({ family: 'PingFang SC', style: 'Regular' });
 // hyperlinks, listStyles, paragraphSpacing, textStyles
 // hasMissingFont (只读), setRange* 系列方法
 ```
+
+## 开发指南补遗
+
+Skill 正文已覆盖从零搭建插件项目、manifest.json 配置、TypeScript 支持、调试等基础流程（参见 `assets/` 模板和 `references/development-guide.md`）。以下是官方文档中 Skill 正文未展开但值得了解的补充主题：
+
+### 插件发布流程
+
+- 打开 MasterGo 客户端 → 插件 → 管理插件 → 开发中 → 点击右侧"发布"
+- 社区发布需审核，审核通过后可在插件社区搜索到；团队发布无需审核
+- 开发中的插件可选择移除（不会删除本地代码）
+
+### 网络请求注意事项
+
+- 网络请求需在 UI 线程（iframe）中进行，主线程沙箱不支持 fetch/XHR
+- MasterGo 为 HTTPS 环境，插件发出的网络请求也必须是 HTTPS
+- 插件 iframe 的 origin 为 `null`，因此只能调用 `Access-Control-Allow-Origin: *` 的 API
+
+### Vue / React 模板
+
+MasterGo 官方提供 Vue 和 React 插件模板，通过 "插件 → 开发者模式 → 创建/添加插件" 选择模板创建。模板项目构建后生成 `dist/` 目录，`manifest.json` 的 `main` 和 `ui` 指向构建产物。
+
+### 动画 (requestAnimationFrame)
+
+主线程沙箱支持 `requestAnimationFrame`，可实现简单的帧动画。注意 `node.rotation` 取值范围是 `[-180, 180]`。
+
+```typescript
+function rotate() {
+  node.rotation = (angle % 360) - 180;
+  requestAnimationFrame(rotate);
+}
+requestAnimationFrame(rotate);
+```
+
+### UI 侧触发 Drop 事件
+
+要将插件 UI 中的图标/元素拖入画布，UI 侧 `postMessage` 携带 `pluginDrop` 字段时会触发主线程 `drop` 事件（而非 `mg.ui.onmessage`），回调参数含 `absoluteX`/`absoluteY` 等经过坐标换算的信息。
+
+```typescript
+// UI 侧
+parent.postMessage({ pluginDrop: { clientX, clientY, dropMetadata: { svg: '...' } } }, '*');
+// 主线程
+mg.on('drop', (dropEvent) => {
+  const frame = await mg.createNodeFromSvgAsync(dropEvent.dropMetadata.svg);
+  frame.x = dropEvent.absoluteX - frame.width / 2;
+  frame.y = dropEvent.absoluteY - frame.height / 2;
+});
+```
+
+### 图片数据处理
+
+图片填充的操作流程：`fills` 取出 `IMAGE` 类型 → `mg.getImageByHref(href)` → `image.getBytesAsync()` → 发送到 UI 线程用 Canvas 处理 → 发回主线程 → `mg.createImage(data)` 创建新图片引用 → 重新设置 fills。
+
+---
 
 ## REST API（服务端接口）
 
