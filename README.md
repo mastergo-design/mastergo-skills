@@ -4,20 +4,10 @@ MasterGo 插件开发与 API 维护的 Claude Code skill，基于 [MasterGo 官�
 
 ## 安装
 
-### 方式一：wind-skills 已安装（推荐）
-
-如果你已安装 [wind-skills](https://github.com/muzi131313/wind-skills)，本 skill 已内置其中，无需额外安装。
-
-### 方式二：独立安装
-
 ```bash
-# 1. Clone 到 Claude Code skills 目录
+# Clone 到 Claude Code skills 目录
 mkdir -p ~/.claude/skills
 git clone git@github.com:mastergo-design/plugin-develop-skill.git ~/.claude/skills/mastergo-plugin
-
-# 2. 安装参考文档（按需）
-mkdir -p ~/.claude/skills/mastergo-plugin/references
-cp ~/.claude/skills/mastergo-plugin/references/*.md ~/.claude/skills/mastergo-plugin/references/
 ```
 
 安装后在对话中提到"MasterGo 插件开发"、"mg.createFrame"、"flexMode"、"devmode 代码生成" 等关键词即可自动触发。
