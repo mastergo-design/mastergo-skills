@@ -23,7 +23,7 @@ version: 0.4.0
 
 ## 概述
 
-本 skill 基于 MasterGo 官方插件文档（`/Users/liyanfeng/code/mg/mastergo-plugin-docs`）编写，辅助 MasterGo 插件开发。插件采用双线程架构（主线程 + UI 线程），主线程运行在沙箱中可访问 MasterGo API，UI 线程运行在 iframe 中可访问浏览器 API。
+本 skill 基于 MasterGo 官方插件文档编写，辅助 MasterGo 插件开发。插件采用双线程架构（主线程 + UI 线程），主线程运行在沙箱中可访问 MasterGo API，UI 线程运行在 iframe 中可访问浏览器 API。
 
 ## 节点类型一览
 
