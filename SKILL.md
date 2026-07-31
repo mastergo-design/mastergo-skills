@@ -1,7 +1,7 @@
 ---
 name: mastergo-plugin
 description: MasterGo 插件开发与 API 维护一体化 skill。覆盖两类场景：(A) 插件开发——从零创建插件项目结构、mg 全局 API 参考、节点类型、自动布局(flexMode)、组件/样式/团队库/字体/图片、DevMode 代码生成、UI 通信、调试与最佳实践；(B) 插件 API 变更同步——当 API 新增/修改/废弃时，按顺序跨三仓库更新 plugin-typings 类型发布 + mastergo-plugin-docs 开发者文档 + master-internal-plugins E2E 单测。触发词：mastergo 插件开发、插件 API、plugin api update、更新插件类型、更新插件文档、补充插件单测、同步插件 API、插件 API 变更、devmode 代码生成、mg.createFrame、flexMode 自动布局。
-version: 0.4.0
+version: 0.5.0
 ---
 
 # MasterGo 插件开发与 API 维护
@@ -47,6 +47,8 @@ version: 0.4.0
 | 组件集 | COMPONENT_SET | mg.combineAsVariants() | variantProperties |
 | 实例 | INSTANCE | component.createInstance() | mainComponent |
 | Section | SECTION | mg.createSection() | children |
+| 智能容器 | INTELLIGENT_CONTAINER | mg.createIntelligentContainer() | shaderCode, isPlaying (GLSL shader) |
+| 文本子图层 | TEXT_SUBLAYER | -（连接线/组件文本子层） | characters, fills（只读 align/autoResize 固定 CENTER） |
 
 ## 全局 mg 对象命名空间
 
@@ -927,6 +929,49 @@ interface Easing {
                                       // | 'CUSTOM_CUBIC_BEZIER'
   readonly easingFunctionCubicBezier?: { x1: number; x2: number; y1: number; y2: number };
 }
+```
+
+### 16. 智能容器节点 (IntelligentContainerNode)
+
+智能容器继承自 FrameNode，用于承载 GLSL shader 动画效果。创建方法：`mg.createIntelligentContainer()`。
+
+```typescript
+// 特有属性
+const ic = mg.createIntelligentContainer();
+ic.shaderCode = 'void main() { ... }';  // GLSL 着色器代码
+ic.isPlaying = true;                     // 播放/暂停
+
+// GLSL 代码格式要求：
+// 1. 仅需片段着色器（Fragment Shader），不需顶点着色器
+// 2. 必须声明两个 uniform：uniform float u_time;（时间戳，毫秒）
+//    uniform sampler2D u_texture;（画布纹理）
+// 3. UV 坐标必须通过 textureSize 获取，不可硬编码分辨率：
+//    vec2 uv = gl_FragCoord.xy / vec2(textureSize(u_texture, 0));
+// 4. 自定义参数声明为 const，上方注释说明功能和取值范围：
+//    // 极光强度: [0.2, 3.0]
+//    const float AURORA_INTENSITY = 1.4;
+//    注释格式是设置面板自动解析参数的依据，会被映射为可拖拽滑块
+```
+
+### 17. 文本子图层节点 (TextSublayerNode)
+
+文本子图层是文本的精简版本，出现在连接线文本（`connector.text`）和组件文本子层等场景。类型标识：`'TEXT_SUBLAYER'`。
+
+```typescript
+// TextSublayerNode 与 TextNode 的关键差异：
+// - textAlignHorizontal / textAlignVertical: 固定为 'CENTER'（只读）
+// - textAutoResize: 固定为 'WIDTH_AND_HEIGHT'（只读）
+// - 不可调整大小或重新定位（无 x/y/width/height）
+
+// 读取和设置文本内容（和普通文本节点一致）
+connector.text.characters = '一些文本';
+await mg.loadFontAsync({ family: 'PingFang SC', style: 'Regular' });
+
+// 可用属性：
+// characters, insertCharacters/deleteCharacters, fills, fillStyleId
+// fontName, fontSize, letterSpacing, lineHeight, textDecoration
+// hyperlinks, listStyles, paragraphSpacing, textStyles
+// hasMissingFont (只读), setRange* 系列方法
 ```
 
 ## REST API（服务端接口）
