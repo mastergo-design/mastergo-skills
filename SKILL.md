@@ -1235,7 +1235,9 @@ cd $MG_DOCS_ROOT/plugin-typings && yarn release
 | `docs/apis/` | API 参考文档，每个节点/模块一个 `.md` 文件 |
 | `docs/types/` | TypeScript 类型参考文档 |
 | `docs/updates/` | 版本更新日志 |
-| `docs/guide/` | 开发指南 |
+| `docs/guide/` | 开发指南（intro / setup / tutorials） |
+| `docs/rest-api/` | REST API (OpenAPI Beta) |
+| `docs/updates/` | 版本更新日志 |
 | `docs/plugin-typings/` | 类型安装使用说明 |
 
 #### 操作步骤
