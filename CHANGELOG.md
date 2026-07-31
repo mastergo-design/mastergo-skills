@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026-07-31] v0.6.0
+- 新增开发指南补遗：插件发布流程、网络请求注意事项、Vue/React 模板、动画、Drop 事件、图片数据处理
+
+
 ## [2026-07-31] v0.5.0
 - 新增智能容器节点 (IntelligentContainerNode/GLSL shader) 和文本子图层节点 (TextSublayerNode) API 章节
 
