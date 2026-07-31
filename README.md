@@ -4,11 +4,44 @@ MasterGo 插件开发与 API 维护的 Claude Code skill，基于 [MasterGo 官�
 
 ## 安装
 
+### 方式一：Claude Code 用户安装
+
 ```bash
 # Clone 到 Claude Code skills 目录
 mkdir -p ~/.claude/skills
 git clone git@github.com:mastergo-design/plugin-develop-skill.git ~/.claude/skills/mastergo-plugin
 ```
+
+### 方式二：Claude Agent SDK 安装
+
+```bash
+# 安装 skill 目录
+git clone git@github.com:mastergo-design/plugin-develop-skill.git ./skills/mastergo-plugin
+
+# 在 Agent 配置中注册
+# skills/mastergo-plugin/SKILL.md 可直接作为 system prompt 注入
+```
+
+```typescript
+// 示例：在 Agent SDK 中注册 skill
+import { Agent } from "@anthropic-ai/sdk";
+
+const agent = new Agent({
+  model: "claude-sonnet-4-5-20250901",
+  skills: [
+    {
+      name: "mastergo-plugin",
+      path: "./skills/mastergo-plugin",
+      description: "MasterGo 插件开发与 API 维护",
+      triggers: ["mastergo 插件", "mg.createFrame", "flexMode", "devmode"],
+    },
+  ],
+});
+```
+
+### 方式三：手动注册（任意 AI 工具）
+
+将 `SKILL.md` 的 **frontmatter**（`---` 之间的 name / description）和完整内容注入到 AI 工具的 system prompt 或 skill 配置中即可。
 
 安装后在对话中提到"MasterGo 插件开发"、"mg.createFrame"、"flexMode"、"devmode 代码生成" 等关键词即可自动触发。
 
