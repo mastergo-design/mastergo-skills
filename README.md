@@ -4,22 +4,34 @@ MasterGo 插件开发与 API 维护的 Claude Code skill，基于 [MasterGo 官�
 
 ## 安装
 
-### 方式一：Claude Code 用户安装
+### 方式一：通过 LLM 对话一键安装（推荐）
+
+将以下提示词发送给任意支持 skill 安装的 LLM 工具（如 Claude Code、Cursor 等），即可自动完成安装：
+
+```text
+安装 skill: git@github.com:mastergo-design/plugin-develop-skill.git
+```
+
+也可以更详细地提要求：
+
+```text
+请帮我安装 MasterGo 插件开发 skill：
+1. 执行命令: mkdir -p ~/.claude/skills && git clone git@github.com:mastergo-design/plugin-develop-skill.git ~/.claude/skills/mastergo-plugin
+2. 确认 ~/.claude/skills/mastergo-plugin/SKILL.md 文件存在且 frontmatter 中包含 name: mastergo-plugin
+3. 安装完成后告诉我已就绪
+```
+
+### 方式二：Claude Code 用户手动安装
 
 ```bash
-# Clone 到 Claude Code skills 目录
 mkdir -p ~/.claude/skills
 git clone git@github.com:mastergo-design/plugin-develop-skill.git ~/.claude/skills/mastergo-plugin
 ```
 
-### 方式二：Claude Agent SDK 安装
+### 方式三：Claude Agent SDK 安装
 
 ```bash
-# 安装 skill 目录
 git clone git@github.com:mastergo-design/plugin-develop-skill.git ./skills/mastergo-plugin
-
-# 在 Agent 配置中注册
-# skills/mastergo-plugin/SKILL.md 可直接作为 system prompt 注入
 ```
 
 ```typescript
@@ -37,23 +49,6 @@ const agent = new Agent({
     },
   ],
 });
-```
-
-### 方式三：通过 LLM 对话一键安装
-
-将以下提示词发送给任意支持 skill 安装的 LLM 工具（如 Claude Code、Cursor 等），即可自动完成安装：
-
-```text
-请帮我安装 MasterGo 插件开发 skill：
-1. 执行命令: mkdir -p ~/.claude/skills && git clone git@github.com:mastergo-design/plugin-develop-skill.git ~/.claude/skills/mastergo-plugin
-2. 确认 ~/.claude/skills/mastergo-plugin/SKILL.md 文件存在且 frontmatter 中包含 name: mastergo-plugin
-3. 安装完成后告诉我已就绪
-```
-
-Claude Code 用户也可以用更简短的方式：
-
-```text
-安装 skill: git@github.com:mastergo-design/plugin-develop-skill.git
 ```
 
 ### 方式四：手动注册（任意 AI 工具）
