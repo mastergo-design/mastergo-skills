@@ -1,7 +1,7 @@
 ---
 name: mastergo-plugin
-description: MasterGo 插件开发与 API 维护一体化 skill。覆盖三类场景：(A) 插件开发——从零创建插件项目结构、mg 全局 API 参考、节点类型、自动布局(flexMode)、组件/样式/团队库/字体/图片、DevMode 代码生成、UI 通信、调试与最佳实践；(B) 插件 API 变更同步——当 API 新增/修改/废弃时，按顺序跨三仓库更新 plugin-typings 类型发布 + mastergo-plugin-docs 开发者文档 + master-internal-plugins E2E 单测；(C) 整页批量导出——页面级画板枚举、文字/批注提取、跳转逻辑(reactions)导出、配合 MCP 批量拉取 DSL。触发词：mastergo 插件开发、插件 API、plugin api update、更新插件类型、更新插件文档、补充插件单测、同步插件 API、插件 API 变更、devmode 代码生成、mg.createFrame、flexMode 自动布局、整页导出、页面画板枚举、批量拉取、跳转逻辑导出、reactions 导出。
-version: 0.7.0
+description: MasterGo 插件开发与 API 维护一体化 skill。覆盖三类场景：(A) 插件开发——从零创建插件项目结构、mg 全局 API 参考、节点类型、自动布局(flexMode)、组件/样式/团队库/字体/图片、DevMode 代码生成、UI 通信、调试与最佳实践；(B) 插件 API 变更同步——当 API 新增/修改/废弃时，按顺序跨三仓库更新 plugin-typings 类型发布 + mastergo-plugin-docs 开发者文档 + master-internal-plugins E2E 单测；(C) 整页批量导出——纯 token 免插件的页面级画板枚举(getPageLayers)、批量拉取 DSL、allTexts 文本白名单防幻觉。触发词：mastergo 插件开发、插件 API、plugin api update、更新插件类型、更新插件文档、补充插件单测、同步插件 API、插件 API 变更、devmode 代码生成、mg.createFrame、flexMode 自动布局、整页导出、页面画板枚举、批量拉取、跳转逻辑导出、reactions 导出。
+version: 0.8.1
 ---
 
 # MasterGo 插件开发与 API 维护
@@ -12,9 +12,9 @@ version: 0.7.0
 
 - **场景 A：开发 MasterGo 插件**（新建项目 / 查 mg API / 节点类型 / 自动布局 / 组件 / 样式 / DevMode 代码生成 / 调试 / 最佳实践）→ 见下方「# MasterGo 插件开发助手」
 - **场景 B：插件 API 变更同步**（API 新增/修改/废弃 → 同步 typings 类型发布 + 开发者文档 + E2E 单测）→ 见下方「# MasterGo 插件 API 更新全流程」
-- **场景 C：整页批量导出**（页面级画板枚举 / 文字批注提取 / 跳转逻辑 reactions 导出 / 纯 key 批量拉 DSL）→ 见 `references/page-batch-export.md` + 现成插件 `assets/page-exporter/` + 批量拉取脚本 `scripts/mcp-batch-fetch.mjs`
+- **场景 C：整页批量导出**（纯 token 免插件：页面级画板枚举 / 批量拉 DSL / 文本白名单防幻觉）→ 见 `references/page-batch-export.md` + 一体化脚本 `scripts/mcp-batch-fetch.mjs`
 
-> 辅助资料：`assets/`（main.ts / manifest.json / ui.html 模板、page-exporter 整页导出插件）、`references/`（api-quick-reference / common-patterns / development-guide / node-types / page-batch-export）、`scripts/`（mcp-batch-fetch 纯 key 批量拉取）按需读取。
+> 辅助资料：`assets/`（main.ts / manifest.json / ui.html 模板）、`references/`（api-quick-reference / common-patterns / development-guide / node-types / page-batch-export）、`scripts/`（mcp-batch-fetch 整页枚举 + 批量拉取）按需读取。
 
 ---
 
@@ -626,12 +626,27 @@ interface MGDSLData {
 }
 ```
 
-### 整页批量导出（page-exporter + mcp-batch-fetch）
+### 整页批量导出（mcp-batch-fetch，纯 token 免插件）
 
-MCP/REST 数据接口只认**图层级 layerId**，传 `page_id` 返回空——整页画板清单需要用插件在
-编辑器内枚举一次（`mg.currentPage.children`，见 `assets/page-exporter/`）；拿到清单后的
-批量拉取可纯 token 无人值守（`scripts/mcp-batch-fetch.mjs`）。能力边界矩阵（哪些通道能/不能
-枚举）与详细方案见 `references/page-batch-export.md`。
+magic-mcp v0.2.8 起 `getPageLayers` / `GET /mcp/page-layers` 支持传 **page_id** 枚举整页图层，
+因此整页导出**不需要装任何插件**，一条命令即可枚举 + 批量拉 DSL：
+
+```bash
+export MG_MCP_TOKEN=mg_xxx
+# 直接粘链接即可；多页用 --page a,b；页面没开过加 --wait 让脚本原地等
+node scripts/mcp-batch-fetch.mjs --url '<MasterGo 链接>' --out ./mg-dump
+```
+
+三个易踩的坑：
+
+1. page-layers 读**服务端缓存**，页面须曾在 MasterGo 里打开过（否则 `totalLayers:0` +
+   `needsCanvasVisit:true`）。缓存**持久有效**，同一页面只需开一次；已验证无纯 token 绕过路径，
+   所以别在这上面浪费时间探索，用 `--wait` 把它变成一次性动作即可；
+2. `design-sections`/`dsl` 仍**只认图层级 layerId**，传 page_id 返回空且 HTTP 200 不报错；
+3. 整页几十个画板必撞 **429**，脚本已内置退避重试，间隔建议 800ms 起，撞了直接重跑（幂等补齐）。
+
+通道能力对照、画板筛选判据（`parentId` 为空 + id 不含 `/` + 类型白名单 + `childrenCount>=1`，
+注意 `depth` 恒为 0 不可用）、REST 端点清单见 `references/page-batch-export.md`。
 
 ### 13. 设计变量系统 (mg.variables)
 

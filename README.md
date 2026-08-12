@@ -67,7 +67,7 @@ const agent = new Agent({
 | **mg.WebSocket** | 插件主线程 WebSocket 通信 |
 | **原型交互** | Reaction / Trigger / Action / Transition / Easing 类型体系 |
 | **DevMode** | 设计转代码：mg.codegen API、DSL 数据结构、组件模板 |
-| **整页批量导出** | page-exporter 插件：页面画板枚举、文字/批注提取、跳转逻辑 reactions 导出、MCP REST 接口清单 |
+| **整页批量导出** | 纯 token 免插件：page-layers 整页画板枚举、批量拉 DSL、allTexts 文本白名单、MCP REST 接口清单 |
 | **API 变更同步** | plugin-typings → docs → E2E 四阶段跨仓库更新流程 |
 | **模板 & 参考** | main.ts / manifest.json / ui.html 模板 |
 
@@ -87,11 +87,14 @@ const agent = new Agent({
 │   ├── main.ts.template
 │   ├── manifest.json.template
 │   └── ui.html.template
-└── references/            # 参考文档
-    ├── api-quick-reference.md
-    ├── common-patterns.md
-    ├── development-guide.md
-    └── node-types.md
+├── references/            # 参考文档
+│   ├── api-quick-reference.md
+│   ├── common-patterns.md
+│   ├── development-guide.md
+│   ├── node-types.md
+│   └── page-batch-export.md
+└── scripts/               # 工具脚本
+    └── mcp-batch-fetch.mjs   # 整页枚举 + 批量拉 DSL（纯 token）
 ```
 
 ## License
