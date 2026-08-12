@@ -1,5 +1,9 @@
 # Changelog
 
+## [2026-08-11] v0.7.0
+- 新增场景 C「整页批量导出」：`references/page-batch-export.md`（官方通道能力边界矩阵——纯 token 页面枚举目前无解的逐项验证结论、MCP REST 底层接口清单、两段式工作流）+ 现成插件 `assets/page-exporter/`（画板枚举、文字/批注、跳转逻辑 reactions 导出）+ `scripts/mcp-batch-fetch.mjs`（纯 key 批量拉 DSL，幂等/限速/断点续拉，已实测）
+
+
 ## [2026-07-31] v0.6.0
 - 新增开发指南补遗：插件发布流程、网络请求注意事项、Vue/React 模板、动画、Drop 事件、图片数据处理
 

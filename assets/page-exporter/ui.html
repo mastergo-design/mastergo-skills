@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font: 13px/1.6 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; padding: 16px; color: #1a1a1a; }
+  h2 { font-size: 15px; margin-bottom: 4px; }
+  p.tip { color: #666; margin-bottom: 12px; }
+  button {
+    padding: 8px 14px; border: none; border-radius: 6px; cursor: pointer;
+    background: #0d6efd; color: #fff; font-size: 13px; margin-right: 8px;
+  }
+  button.secondary { background: #f0f0f0; color: #333; }
+  button:disabled { opacity: .5; cursor: default; }
+  #status { margin: 10px 0; color: #0a7d32; white-space: pre-wrap; }
+  #status.err { color: #c0392b; }
+  textarea {
+    width: 100%; height: 340px; margin-top: 8px; padding: 8px;
+    border: 1px solid #ddd; border-radius: 6px; font: 11px/1.5 monospace;
+    resize: vertical;
+  }
+</style>
+</head>
+<body>
+  <h2>页面数据导出</h2>
+  <p class="tip">导出当前页全部画板清单（layer_id）、文字说明、跳转交互（reactions）。</p>
+  <div>
+    <button id="btn">导出当前页面</button>
+    <button id="dl" class="secondary" disabled>下载 JSON</button>
+    <button id="copy" class="secondary" disabled>复制</button>
+  </div>
+  <div id="status"></div>
+  <textarea id="out" readonly placeholder="导出结果会显示在这里"></textarea>
+
+<script>
+  let result = null;
+  const out = document.getElementById('out');
+  const status = document.getElementById('status');
+  const dl = document.getElementById('dl');
+  const copy = document.getElementById('copy');
+
+  document.getElementById('btn').onclick = () => {
+    status.className = ''; status.textContent = '导出中…';
+    parent.postMessage({ type: 'export' }, '*');
+  };
+
+  dl.onclick = () => {
+    if (!result) return;
+    const blob = new Blob([JSON.stringify(result, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `page-export-${(result.page && result.page.id || 'page').replace(':', '-')}.json`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
+  copy.onclick = async () => {
+    if (!result) return;
+    try { await navigator.clipboard.writeText(JSON.stringify(result)); status.textContent = '已复制到剪贴板'; }
+    catch { out.select(); document.execCommand('copy'); status.textContent = '已复制（兼容模式）'; }
+  };
+
+  window.onmessage = (event) => {
+    const msg = event.data;
+    if (!msg || msg.type !== 'export-result') return;
+    if (msg.ok) {
+      result = msg.data;
+      out.value = JSON.stringify(result, null, 2);
+      status.className = '';
+      status.textContent = `完成：页面「${result.page.name}」共 ${result.frameCount} 个顶层画板/图层`;
+      dl.disabled = false; copy.disabled = false;
+    } else {
+      status.className = 'err';
+      status.textContent = '导出失败：' + msg.error;
+    }
+  };
+</script>
+</body>
+</html>

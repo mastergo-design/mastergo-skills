@@ -67,6 +67,7 @@ const agent = new Agent({
 | **mg.WebSocket** | 插件主线程 WebSocket 通信 |
 | **原型交互** | Reaction / Trigger / Action / Transition / Easing 类型体系 |
 | **DevMode** | 设计转代码：mg.codegen API、DSL 数据结构、组件模板 |
+| **整页批量导出** | page-exporter 插件：页面画板枚举、文字/批注提取、跳转逻辑 reactions 导出、MCP REST 接口清单 |
 | **API 变更同步** | plugin-typings → docs → E2E 四阶段跨仓库更新流程 |
 | **模板 & 参考** | main.ts / manifest.json / ui.html 模板 |
 
