@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026-08-15] v1.0.2
+- `skills/dsl-to-code` v0.1.1 → v0.1.2，新增 **getDslByLayerIds 队列能力**（skill 侧脚本能力，无需等服务端新增 MCP 工具）：
+  - `scripts/mcp-batch-fetch.mjs` 新增 `--concurrency N` 并发队列（默认 2，`MCP_FETCH_CONCURRENCY` 可覆盖）
+  - `--ids 5771:91198,5771:92001 --concurrency 3` 可给定一批单图层 id，逐个走 `/mcp/dsl` 拉 DSL
+  - 单 worker 保留 `MCP_FETCH_INTERVAL_MS` 限速，429/5xx 指数退避重试不受影响
+  - 已存在非空 `dsl.json` 的图层直接复用缓存，重跑只补缺
+
 ## [2026-08-15] v1.0.1
 - `skills/dsl-to-code` v0.1.0 → v0.1.1，按真实 MCP `Dsl` 契约重构：
   - 主路径改为 `getDsl` / `GET /mcp/dsl`（PATH 节点带真实 `path[].data`，无需 `applyDesign`）

@@ -1,7 +1,7 @@
 ---
 name: mastergo-dsl-to-code
-description: MasterGo 设计 DSL → 代码转换 skill。覆盖两类场景：(A) DSL 获取——纯 token 免插件的页面级画板枚举(getPageLayers)、按画板批量拉取 /mcp/dsl 落盘、allTexts 文本白名单防幻觉；(B) DSL → 代码——优先用 getDsl 拿真实 path[].data 的整层 DSL，把 DSL 转换为 html / vue / react / flutter 等目标代码；getDesignSections + applyDesign 仅作为整层 DSL 过大或需要分区分发的兜底。触发词：mastergo dsl、dsl to code、dsl 转代码、设计转代码、整页导出、页面画板枚举、批量拉取、跳转逻辑导出、reactions 导出、mg.codegen、getDSL、getCodeByDSL。
-version: 0.1.1
+description: MasterGo 设计 DSL → 代码转换 skill。覆盖两类场景：(A) DSL 获取——纯 token 免插件的页面级画板枚举(getPageLayers)、按画板批量拉取 /mcp/dsl 落盘、按单图层 id 队列拉取(getDslByLayerIds 脚本队列)、allTexts 文本白名单防幻觉；(B) DSL → 代码——优先用 getDsl 拿真实 path[].data 的整层 DSL，把 DSL 转换为 html / vue / react / flutter 等目标代码；getDesignSections + applyDesign 仅作为整层 DSL 过大或需要分区分发的兜底。触发词：mastergo dsl、dsl to code、dsl 转代码、设计转代码、整页导出、页面画板枚举、批量拉取、getDslByLayerIds、跳转逻辑导出、reactions 导出、mg.codegen、getDSL、getCodeByDSL。
+version: 0.1.2
 ---
 
 # MasterGo DSL 获取与代码转换
@@ -103,14 +103,18 @@ node scripts/mcp-batch-fetch.mjs --file 1158... --page 5496:96753 --wait --out .
 node scripts/mcp-batch-fetch.mjs --file 1158... --page 808:150160 --list-only
 # 指定画板
 node scripts/mcp-batch-fetch.mjs --file 1158... --ids 5771:91198,5771:92001 --out ./mg-dump
+# getDslByLayerIds 队列能力：给定一批单图层 id，按并发队列逐个拉 /mcp/dsl
+node scripts/mcp-batch-fetch.mjs --file 1158... --ids 5771:91198,5771:92001 --concurrency 3 --out ./mg-dump
 ```
 
 可选参数：`--url <长链>`（不支持 `/goto/` 短链）、`--wait [秒]`（默认 300）、
-`--min-children N`（默认 1）、`--types A,B`（覆盖类型白名单）、`--limit N`（调试取前 N 个）。
+`--min-children N`（默认 1）、`--types A,B`（覆盖类型白名单）、`--limit N`（调试取前 N 个）、
+`--concurrency N`（并发队列大小，默认 2，`MCP_FETCH_CONCURRENCY` 可覆盖）。
 
 特性：
 
-- 串行限速（默认 300ms 间隔，`MCP_FETCH_INTERVAL_MS` 可调），失败单个记录不中断整批；
+- 并发队列 + 单请求限速（`--concurrency` 控制队列大小，默认 2；`MCP_FETCH_INTERVAL_MS` 控制单 worker
+  任务间隔，默认 300ms），失败单个记录不中断整批；
 - **429/5xx 指数退避重试**（`MCP_FETCH_MAX_RETRIES=5`、`MCP_FETCH_RETRY_BASE_MS=2000`，
   服务端给 `Retry-After` 时优先采用）。实测整页 88 个画板跑到第 80 个必撞 429，
   间隔建议 800ms 起；
@@ -172,8 +176,10 @@ PATH 节点只给 `svgShortKey`，最后靠 `applyDesign` 统一替换 SVG 和�
   4. 最后 `mcp__applyDesign` 替换占位符并落盘
   - 这是 section 工作流的完整形态，不是本 skill 的默认路径
 
-> 注意：当前 frontend-mcp-server 工具列表里没有独立的 `getDslByLayerIds` MCP 工具；
-> 需要「只取某个子树」时，优先用 `getDsl` 取父图层，或回退到 `getDesignSections` 的 section 机制。
+> 注意：当前 `frontend-mcp-server` 工具列表里没有独立的 `getDslByLayerIds` MCP 工具。
+> 因此这个 skill 把 `getDslByLayerIds` 做成了**脚本队列能力**：`mcp-batch-fetch.mjs --ids ... --concurrency N`
+> 会按单个图层 id 逐个走 `/mcp/dsl`，用并发队列拉取；不需要依赖服务端单独暴露该工具。
+> 如果未来 MCP 服务端补上 `getDslByLayerIds`，再把它切换为对应的 MCP 工具即可。
 
 ## 输入契约：MCP `Dsl` 结构
 

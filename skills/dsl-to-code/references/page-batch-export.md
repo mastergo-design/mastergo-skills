@@ -112,14 +112,18 @@ node scripts/mcp-batch-fetch.mjs --file 1158... --page 5496:96753 --wait --out .
 node scripts/mcp-batch-fetch.mjs --file 1158... --page 808:150160 --list-only
 # 指定画板
 node scripts/mcp-batch-fetch.mjs --file 1158... --ids 5771:91198,5771:92001 --out ./mg-dump
+# getDslByLayerIds 队列能力：给定一批单图层 id，按并发队列逐个拉 /mcp/dsl
+node scripts/mcp-batch-fetch.mjs --file 1158... --ids 5771:91198,5771:92001 --concurrency 3 --out ./mg-dump
 ```
 
 可选参数：`--url <长链>`（不支持 `/goto/` 短链）、`--wait [秒]`（默认 300）、
-`--min-children N`（默认 1）、`--types A,B`（覆盖类型白名单）、`--limit N`（调试取前 N 个）。
+`--min-children N`（默认 1）、`--types A,B`（覆盖类型白名单）、`--limit N`（调试取前 N 个）、
+`--concurrency N`（并发队列大小，默认 2，`MCP_FETCH_CONCURRENCY` 可覆盖）。
 
 特性：
 
-- 串行限速（默认 300ms 间隔，`MCP_FETCH_INTERVAL_MS` 可调），失败单个记录不中断整批；
+- 并发队列 + 单请求限速：`--concurrency` 控制队列大小（默认 2），`MCP_FETCH_INTERVAL_MS`
+  控制单 worker 任务间隔（默认 300ms），失败单个记录不中断整批；
 - **429/5xx 指数退避重试**（`MCP_FETCH_MAX_RETRIES=5`、`MCP_FETCH_RETRY_BASE_MS=2000`，
   服务端给 `Retry-After` 时优先采用）。实测整页 88 个画板跑到第 80 个必撞 429，
   间隔建议 800ms 起；

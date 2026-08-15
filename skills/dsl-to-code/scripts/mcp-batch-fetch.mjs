@@ -22,12 +22,16 @@
  *   node mcp-batch-fetch.mjs --file 1158... --ids 5771:91198,5771:92001 --out ./dump
  *   node mcp-batch-fetch.mjs --file 1158... --frames frames.json --out ./dump
  *
+ *   # getDslByLayerIds 队列能力：给定一批单图层 id，按并发队列逐个拉 /mcp/dsl
+ *   node mcp-batch-fetch.mjs --file 1158... --ids 5771:91198,5771:92001 --concurrency 3 --out ./dump
+ *
  * 可选参数：
  *   --url <链接>      粘贴 MasterGo 长链，自动解析 fileId / page_id / layer_id（不支持 /goto/ 短链）
  *   --wait [秒]       页面未缓存时原地轮询等待（默认 300s），打开页面后自动继续
  *   --min-children N  顶层节点至少 N 个子节点才算画板（默认 1，过滤零散文本/连接线）
  *   --types A,B       覆盖画板类型白名单（默认 SECTION,FRAME,COMPONENT,INSTANCE,9）
  *   --limit N         只取前 N 个画板（调试用）
+ *   --concurrency N   并发队列大小（默认 2，可用 MCP_FETCH_CONCURRENCY 覆盖）
  *
  * 说明：
  * - 走 magic-mcp 服务端 REST，与 MCP 工具同源；认证头 X-MG-UserAccessToken；
@@ -48,6 +52,7 @@ const TOKEN = process.env.MG_MCP_TOKEN || process.env.MASTERGO_API_TOKEN || proc
 const INTERVAL_MS = Number(process.env.MCP_FETCH_INTERVAL_MS || 300);
 const MAX_RETRIES = Number(process.env.MCP_FETCH_MAX_RETRIES || 5);
 const RETRY_BASE_MS = Number(process.env.MCP_FETCH_RETRY_BASE_MS || 2000);
+const DEFAULT_CONCURRENCY = Number(process.env.MCP_FETCH_CONCURRENCY || 2);
 
 /** 可作为「画板」独立出码的节点类型（9 = GROUP，流程图里常见的成组画板） */
 const DEFAULT_FRAME_TYPES = ['SECTION', 'FRAME', 'COMPONENT', 'INSTANCE', '9'];
@@ -180,7 +185,28 @@ function collectDslTexts(node, acc = new Set()) {
 /** 第二步：拉单个画板的整层 DSL（/mcp/dsl），写入 dsl.json + texts.json */
 async function fetchFrame(fileId, layerId, outDir) {
     const dir = path.join(outDir, sanitize(layerId));
+    const dslFile = path.join(dir, 'dsl.json');
     const url = `${BASE}/mcp/dsl?fileId=${fileId}&layerId=${encodeURIComponent(layerId)}`;
+
+    // 幂等：已有非空 dsl.json 则直接复用，避免撞限流后重跑时重复拉取。
+    try {
+        const cached = JSON.parse(await readFile(dslFile, 'utf8'));
+        const cachedNodes = Array.isArray(cached?.nodes) ? cached.nodes : [];
+        if (cachedNodes.length > 0) {
+            const texts = new Set();
+            for (const node of cachedNodes) collectDslTexts(node, texts);
+            for (const component of cached.components ?? []) collectDslTexts(component, texts);
+            return {
+                layerId,
+                nodes: cachedNodes.length,
+                components: cached.components?.length ?? 0,
+                styleCount: cached.styles ? Object.keys(cached.styles).length : 0,
+                allTexts: [...texts],
+                cached: true,
+            };
+        }
+    } catch { /* 不存在或解析失败，继续拉取 */ }
+
     const dsl = await getJson(url);
 
     // /mcp/dsl 只认图层级 layerId；空节点或已走 section 流程会拿到 skipped 标记。
@@ -207,6 +233,22 @@ async function fetchFrame(fileId, layerId, outDir) {
     };
 }
 
+/** 简单并发队列：固定 worker 数，顺序消费 items，保留输入顺序 */
+async function mapWithConcurrency(items, limit, worker) {
+    const results = new Array(items.length);
+    let nextIndex = 0;
+    async function run() {
+        while (true) {
+            const idx = nextIndex++;
+            if (idx >= items.length) return;
+            results[idx] = await worker(items[idx], idx);
+        }
+    }
+    const workers = Array.from({ length: Math.max(1, Math.min(limit, items.length)) }, run);
+    await Promise.all(workers);
+    return results;
+}
+
 /** 拉一个页面/一组画板，落盘到 outDir，返回统计 */
 async function runOne(opt, outDir, pageId, frames) {
     if (opt['list-only']) {
@@ -220,19 +262,21 @@ async function runOne(opt, outDir, pageId, frames) {
         JSON.stringify({ fileId: opt.file, page: pageId, frames }, null, 2),
     );
 
-    const results = [];
-    for (const [idx, frame] of frames.entries()) {
+    const concurrency = Number(opt.concurrency || DEFAULT_CONCURRENCY);
+    const results = await mapWithConcurrency(frames, concurrency, async (frame, idx) => {
         const label = `[${idx + 1}/${frames.length}] ${frame.name || frame.id}`;
         try {
             const r = await fetchFrame(opt.file, frame.id, outDir);
-            results.push({ name: frame.name, ...r });
-            console.log(`${label}: ${r.nodes} nodes ${r.skipped ? '(跳过)' : 'OK'}`);
+            console.log(`${label}: ${r.nodes} nodes ${r.cached ? '(缓存)' : r.skipped ? '(跳过)' : 'OK'}`);
+            return { name: frame.name, ...r };
         } catch (e) {
-            results.push({ name: frame.name, layerId: frame.id, error: String(e.message || e) });
             console.error(`${label}: 失败 ${e.message}`);
+            return { name: frame.name, layerId: frame.id, error: String(e.message || e) };
+        } finally {
+            await sleep(INTERVAL_MS);
         }
-        await sleep(INTERVAL_MS);
-    }
+    });
+
     await writeFile(
         path.join(outDir, 'index.json'),
         JSON.stringify({ fileId: opt.file, page: pageId, fetchedAt: new Date().toISOString(), results }, null, 2),
