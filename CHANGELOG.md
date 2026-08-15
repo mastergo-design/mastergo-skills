@@ -1,7 +1,7 @@
 # Changelog
 
-## [2026-08-15] v1.1.0
-- `skills/dsl-to-code` v0.1.0 → v0.2.0，按真实 MCP `Dsl` 契约重构：
+## [2026-08-15] v1.0.1
+- `skills/dsl-to-code` v0.1.0 → v0.1.1，按真实 MCP `Dsl` 契约重构：
   - 主路径改为 `getDsl` / `GET /mcp/dsl`（PATH 节点带真实 `path[].data`，无需 `applyDesign`）
   - `getDesignSections + applyDesign` 明确降级为整层 DSL 过大 / 已走 section 流程时的兜底
   - 修正旧版误用 DevMode `MGDSLData`（`nodeMap/localStyleMap/fileMap/root/entry`）的 schema，

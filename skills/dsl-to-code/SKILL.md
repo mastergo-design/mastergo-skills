@@ -1,7 +1,7 @@
 ---
 name: mastergo-dsl-to-code
 description: MasterGo 设计 DSL → 代码转换 skill。覆盖两类场景：(A) DSL 获取——纯 token 免插件的页面级画板枚举(getPageLayers)、按画板批量拉取 /mcp/dsl 落盘、allTexts 文本白名单防幻觉；(B) DSL → 代码——优先用 getDsl 拿真实 path[].data 的整层 DSL，把 DSL 转换为 html / vue / react / flutter 等目标代码；getDesignSections + applyDesign 仅作为整层 DSL 过大或需要分区分发的兜底。触发词：mastergo dsl、dsl to code、dsl 转代码、设计转代码、整页导出、页面画板枚举、批量拉取、跳转逻辑导出、reactions 导出、mg.codegen、getDSL、getCodeByDSL。
-version: 0.2.0
+version: 0.1.1
 ---
 
 # MasterGo DSL 获取与代码转换
