@@ -1,6 +1,6 @@
 # MasterGo Plugin Develop Skill
 
-MasterGo 插件开发与 API 维护的 Claude Code skill，基于 [MasterGo 官方插件文档](https://develop-mastergo.pages.lanhuapp.com/) 编写。
+MasterGo 插件开发与 API 维护的 Claude Code skill，基于 [MasterGo 官方插件文档]([https://develop-mastergo.pages.lanhuapp.com/](https://developers.mastergo.com/)) 编写。
 
 ## 安装
 
