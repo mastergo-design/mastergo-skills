@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026-08-15] v1.1.0
+- `skills/dsl-to-code` v0.1.0 → v0.2.0，按真实 MCP `Dsl` 契约重构：
+  - 主路径改为 `getDsl` / `GET /mcp/dsl`（PATH 节点带真实 `path[].data`，无需 `applyDesign`）
+  - `getDesignSections + applyDesign` 明确降级为整层 DSL 过大 / 已走 section 流程时的兜底
+  - 修正旧版误用 DevMode `MGDSLData`（`nodeMap/localStyleMap/fileMap/root/entry`）的 schema，
+    改为 `Dsl { styles, nodes, components }`
+  - 新增 `references/dsl-schema.md`、`references/codegen-rules.md`
+  - `scripts/mcp-batch-fetch.mjs` 改为逐画板拉 `/mcp/dsl`，落盘 `dsl.json` + `texts.json`
+
 ## [2026-08-15] v1.0.0
 - **仓库重命名**：`plugin-develop-skill` → `mastergo-skills`，作为 MasterGo 各 skill 的集合仓库（`skills/<skill-name>/` 目录约定，与内部 skills 模板一致）
 - **拆分两个 skill**：

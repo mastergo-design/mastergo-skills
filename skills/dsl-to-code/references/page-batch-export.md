@@ -50,8 +50,8 @@ magic-mcp **v0.2.8** 新增了 `GET /mcp/page-layers` 端点（对应 MCP 工具
 | 端点 | 对应 MCP 工具 | 说明 |
 |------|--------------|------|
 | `GET /mcp/page-layers?fileId=&layerId=<pageId>` | getPageLayers | **整页图层清单**（见第 2 节）；服务端 60s 内存缓存 |
-| `GET /mcp/design-sections?fileId=&layerId=[&sectionIndex=N]` | getDesignSections | 不传 sectionIndex 返回分区目录（含 `rootMetadata.allTexts` 文本白名单、splitContainers 坐标），传了返回单区 DSL |
-| `GET /mcp/dsl?fileId=&layerId=&format=json\|yaml\|tree` | getDsl | 整层 DSL（大，慎用） |
+| `GET /mcp/dsl?fileId=&layerId=&format=json\|yaml\|tree` | getDsl | **本 skill 主路径**。返回 `Dsl { styles, nodes, components }`，PATH 节点带真实 `path[].data`，无需 applyDesign |
+| `GET /mcp/design-sections?fileId=&layerId=[&sectionIndex=N]` | getDesignSections | **兜底路径**。不传 sectionIndex 返回分区目录（含 `rootMetadata.allTexts` 文本白名单、splitContainers 坐标），传了返回单区 DSL |
 | `GET /mcp/extract-svg?fileId=&layerId=[&page=&pageSize=]` | extractSvg | 提取 PATH 节点 SVG |
 | `GET /mcp/meta?fileId=&layerId=` | getMeta | 站点级 meta/action（需设计师在文件里配置，否则空） |
 | `GET /mcp/style?fileId=&layerId=` | （组件样式） | getComponentStyleJson 用 |
@@ -95,7 +95,8 @@ magic-mcp **v0.2.8** 新增了 `GET /mcp/page-layers` 端点（对应 MCP 工具
 
 ## 3. 一条命令拉全页（`scripts/mcp-batch-fetch.mjs`）
 
-脚本已内置枚举 + 批量拉取两步，纯 token 无人值守：
+脚本已内置枚举 + 批量拉取两步，纯 token 无人值守。**落盘的是 `/mcp/dsl` 原始 `Dsl`**，
+每个画板一个 `dsl.json`，同时生成该画板的 `texts.json` 文本白名单。
 
 ```bash
 export MG_MCP_TOKEN=mg_xxx
@@ -122,24 +123,24 @@ node scripts/mcp-batch-fetch.mjs --file 1158... --ids 5771:91198,5771:92001 --ou
 - **429/5xx 指数退避重试**（`MCP_FETCH_MAX_RETRIES=5`、`MCP_FETCH_RETRY_BASE_MS=2000`，
   服务端给 `Retry-After` 时优先采用）。实测整页 88 个画板跑到第 80 个必撞 429，
   间隔建议 800ms 起；
-- **幂等**：已存在的 section 文件跳过，重跑只补缺的（撞限流后直接重跑即可补齐）；
+- **幂等**：已存在的 `dsl.json` 文件跳过，重跑只补缺的（撞限流后直接重跑即可补齐）；
 - 页面未缓存时给出明确指引（打开哪个 URL、为什么、缓存持久），不静默产出空结果；
 - 输出：
   - `<out>/frames.json` —— 画板清单
-  - `<out>/<layerId>/sections-index.json` —— 分区目录（含 allTexts、splitContainers）
-  - `<out>/<layerId>/section-N.json` —— 各分区 DSL
-  - `<out>/index.json` —— 汇总（每画板 sections 数、allTexts、bbox、错误）
+  - `<out>/<layerId>/dsl.json` —— 该画板的原始 `Dsl { styles, nodes, components }`
+  - `<out>/<layerId>/texts.json` —— 从该画板 DSL 收集到的全部真实文本（白名单）
+  - `<out>/index.json` —— 汇总（每画板 node/component/style 数量、allTexts 长度、错误）
 
 ## 4. 批量消费工作流（AI 生成代码场景）
 
 1. `--list-only` 拿清单，人工过一眼画板名（`弹窗`/`smile` 这类重复名很多，靠 id 区分）；
-2. 批量拉 DSL 落盘；
-3. `allTexts` 是该画板全部真实可见文本的**白名单**，既作需求上下文，也用于生成后自校验防幻觉
-   （任何不在 allTexts 里的可见文案 = 占位符或幻觉）；
+2. 批量拉 DSL 落盘（每画板 `dsl.json` + `texts.json`）；
+3. `texts.json` 是该画板全部真实可见文本的**白名单**，既作需求上下文，也用于生成后自校验防幻觉
+   （任何不在白名单里的可见文案 = 占位符或幻觉）；
 4. AI 逐个画板出码，**一个画板 = 一个独立 standalone HTML 文件**，不要合并；
-5. 同构画板（分区目录里 `structureHash` 相同）只拉首个、其余复用结构换文案。
+5. 结构相同的画板可复用生成结构、只换文案；但不要因为“看起来重复”而跳过文本差异。
 
-跳转关系（原型交互 `reactions`）不在 page-layers / design-sections 的返回里。如需页面跳转
+跳转关系（原型交互 `reactions`）不在 page-layers / dsl 的稳定返回里。如需页面跳转
 地图，只能靠编辑器内插件读节点 `reactions`（`mg.currentPage` 全树扫描，跳转常挂在按钮等
 内层节点上），或让设计师导出交互说明。
 
