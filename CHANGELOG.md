@@ -1,5 +1,14 @@
 # Changelog
 
+## [2026-08-15] v1.0.0
+- **仓库重命名**：`plugin-develop-skill` → `mastergo-skills`，作为 MasterGo 各 skill 的集合仓库（`skills/<skill-name>/` 目录约定，与内部 skills 模板一致）
+- **拆分两个 skill**：
+  - `skills/plugin-develop/`：原插件开发 skill（场景 A 插件开发 + 场景 B API 变更同步），更名为 `mastergo-plugin-develop`，v0.8.1 → v0.9.0
+  - `skills/dsl-to-code/`：新增 skill（场景 A DSL 获取 + 场景 B DSL → html/vue/react/flutter 代码转换），v0.1.0
+- **迁移**：`references/page-batch-export.md` + `scripts/mcp-batch-fetch.mjs` 从 plugin-develop 迁入 dsl-to-code（原场景 C 代码部分）
+- **调研沉淀**：盘点 mcp server / dsl transfer 链路（master-dsl-tansfer / frontend-mcp-server / mastergo-magic-mcp），
+  结论：用户只拿 DSL 时，纯 skill 的转换路径 = LLM 直接基于 DSL 生成代码；DSL 数据结构、硬性生成规则（token 变量化 / SVG 原样 / 防幻觉）、各框架映射要点写入 dsl-to-code/SKILL.md
+
 ## [2026-08-12] v0.8.1
 - `mcp-batch-fetch.mjs` 易用性：新增 `--url`（粘 MasterGo 长链自动解析 fileId/page_id/layer_id）、`--wait [秒]`（页面未缓存时原地轮询，用户打开后自动继续，免去「打开→重跑」往返）、`--page a,b` 多页一次跑完（各自落 `<out>/page-<id>/`，单页失败不中断）
 - 新增 429/5xx 指数退避重试（优先采用 `Retry-After`）——实测整页 88 画板跑到第 80 个必撞限流
