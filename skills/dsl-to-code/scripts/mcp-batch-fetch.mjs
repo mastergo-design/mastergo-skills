@@ -4,7 +4,7 @@
  *
  * 两步全自动：
  *   1) GET /mcp/page-layers   —— 用 page_id 枚举整页图层，筛出顶层画板；
- *   2) GET /mcp/design-sections —— 逐画板拉分区 DSL 落盘。
+ *   2) GET /mcp/dsl           —— 逐画板拉整层 DSL 落盘（每画板 dsl.json + texts.json）。
  *
  * 用法：
  *   export MG_MCP_TOKEN=mg_xxx
@@ -37,10 +37,10 @@
  * - 串行 + 限速（默认 300ms，MCP_FETCH_INTERVAL_MS 可调），单个画板失败记录后继续；
  * - 429/5xx 指数退避重试（MCP_FETCH_MAX_RETRIES=5、MCP_FETCH_RETRY_BASE_MS=2000，
  *   服务端给 Retry-After 时优先采用）；整页几十个画板必会撞限流，别把间隔调太小；
- * - 幂等：已存在的 section 文件跳过，重跑只补缺的。
+ * - 幂等：已存在的 dsl.json 文件跳过，重跑只补缺的。
  */
 
-import { mkdir, readFile, writeFile, access } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const BASE = process.env.MG_API_BASE || 'https://mastergo.com';
@@ -164,37 +164,46 @@ async function listPageFrames(fileId, pageId, opt) {
     return frames;
 }
 
-/** 第二步：拉单个画板的全部分区 */
+/** 递归收集 DSL 中的全部真实文本（含组件定义），作为生成后防幻觉白名单 */
+function collectDslTexts(node, acc = new Set()) {
+    if (node?.text && Array.isArray(node.text)) {
+        for (const t of node.text) {
+            if (t?.text) acc.add(t.text);
+        }
+    }
+    if (Array.isArray(node?.children)) {
+        for (const child of node.children) collectDslTexts(child, acc);
+    }
+    return acc;
+}
+
+/** 第二步：拉单个画板的整层 DSL（/mcp/dsl），写入 dsl.json + texts.json */
 async function fetchFrame(fileId, layerId, outDir) {
     const dir = path.join(outDir, sanitize(layerId));
-    const listUrl = `${BASE}/mcp/design-sections?fileId=${fileId}&layerId=${encodeURIComponent(layerId)}`;
-    const overview = await getJson(listUrl);
-    const total = overview.totalSections ?? 0;
-    if (!total) return { layerId, sections: 0, skipped: true, note: '空分区（可能不是可出码画板）' };
+    const url = `${BASE}/mcp/dsl?fileId=${fileId}&layerId=${encodeURIComponent(layerId)}`;
+    const dsl = await getJson(url);
+
+    // /mcp/dsl 只认图层级 layerId；空节点或已走 section 流程会拿到 skipped 标记。
+    const nodes = Array.isArray(dsl?.nodes) ? dsl.nodes : [];
+    if (dsl?.skipped || nodes.length === 0) {
+        return { layerId, nodes: nodes.length, skipped: true, note: '空 DSL（可能不是可出码画板）' };
+    }
 
     await mkdir(dir, { recursive: true });
-    await writeFile(path.join(dir, 'sections-index.json'), JSON.stringify(overview, null, 2));
+    await writeFile(path.join(dir, 'dsl.json'), JSON.stringify(dsl, null, 2));
 
-    let fetched = 0;
-    for (let i = 0; i < total; i++) {
-        const fp = path.join(dir, `section-${i}.json`);
-        try {
-            await access(fp); // 幂等：已存在则跳过
-            fetched++;
-            continue;
-        } catch { /* 不存在，拉取 */ }
-        const sec = await getJson(`${listUrl}&sectionIndex=${i}`);
-        await writeFile(fp, JSON.stringify(sec, null, 2));
-        fetched++;
-        await sleep(INTERVAL_MS);
-    }
-    const rm = overview.rootMetadata || {};
+    const texts = new Set();
+    for (const node of nodes) collectDslTexts(node, texts);
+    for (const component of dsl.components ?? []) collectDslTexts(component, texts);
+    const allTexts = [...texts];
+    await writeFile(path.join(dir, 'texts.json'), JSON.stringify(allTexts, null, 2));
+
     return {
         layerId,
-        sections: total,
-        fetched,
-        allTexts: rm.allTexts || [],
-        bbox: rm.width ? { width: rm.width, height: rm.height } : undefined,
+        nodes: nodes.length,
+        components: dsl.components?.length ?? 0,
+        styleCount: dsl.styles ? Object.keys(dsl.styles).length : 0,
+        allTexts,
     };
 }
 
@@ -217,7 +226,7 @@ async function runOne(opt, outDir, pageId, frames) {
         try {
             const r = await fetchFrame(opt.file, frame.id, outDir);
             results.push({ name: frame.name, ...r });
-            console.log(`${label}: ${r.sections} sections ${r.skipped ? '(跳过)' : 'OK'}`);
+            console.log(`${label}: ${r.nodes} nodes ${r.skipped ? '(跳过)' : 'OK'}`);
         } catch (e) {
             results.push({ name: frame.name, layerId: frame.id, error: String(e.message || e) });
             console.error(`${label}: 失败 ${e.message}`);
