@@ -61,9 +61,8 @@ magic-mcp **v0.2.8** 新增了 `GET /mcp/page-layers` 端点（对应 MCP 工具
 | Vibe MCP（vibe-mcp） | 桌面客户端会话 | ✅（读选区等） | 需桌面客户端运行 + 文件打开 + MCP 已连接，适合「边看边取」交互场景 |
 | 插件（editor 内 `mg.currentPage.children`） | 编辑器会话 | ✅ | 兜底手段，v0.2.8 后已无必要 |
 
-## MCP REST 底层接口（逆向自 @mastergo/magic-mcp v0.2.8）
+## MCP REST 底层接口
 
-> ⚠️ 非官方公开 API，是 magic-mcp 的服务端实现细节，**可能随版本变动**。
 > 优先走 MCP 工具；REST 直调用于脚本化批处理。
 
 - Base URL：`https://mastergo.com`（`MG_API_BASE` / `API_BASE_URL` 可覆盖）
