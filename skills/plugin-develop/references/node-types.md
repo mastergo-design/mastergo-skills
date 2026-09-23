@@ -134,6 +134,27 @@ if (node.type === 'RECTANGLE') {
 }
 ```
 
+## 连接线节点（CONNECTOR）
+
+`mg.createConnector()` 创建。原型连线相关的**专属属性**：
+
+| 属性 | 类型 | 说明 |
+|------|------|------|
+| `connectorStart` / `connectorEnd` | `ConnectorEndpoint` | 两端端点，见下 |
+| `connectorStartStrokeCap` / `connectorEndStrokeCap` | `'NONE' \| 'ROUND' \| 'SQUARE' \| 'LINE_ARROW' \| 'TRIANGLE_ARROW' \| 'ROUND_ARROW' \| 'RING' \| 'DIAMOND' \| 'LINE'` | 端点箭头样式 |
+| `text` | `TextSublayerNode \| null` | 连线上的文字，未创建时为 null |
+| `createText()` | `() => TextSublayerNode \| null` | 懒创建连线文字，重复调用返回同一子层 |
+| `attachedConnectors` | `ConnectorNode[]`（只读） | 任意 SceneNode 上挂着的连线 |
+
+```typescript
+type ConnectorEndpoint =
+  | { position: { x: number; y: number } }
+  | { position: { x: number; y: number }; endpointNodeId: string;
+      magnet: 'TOP' | 'LEFT' | 'BOTTOM' | 'RIGHT' };
+```
+
+⚠️ 连线**只有几何/样式，不带交互**：`connector.reactions` 不存在。跳转/浮层等动作走**起点节点**的 `node.reactions`（见 SKILL.md 第 15 节）。UI 里拉一条线会同时生成 CONNECTOR + 起点节点上的 reaction，插件侧要自己分别创建。
+
 ## 注意事项
 
 1. **类型安全**：在访问特定类型节点的属性前，先检查 `node.type`
