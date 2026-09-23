@@ -1,5 +1,18 @@
 # Changelog
 
+## [2026-09-23] v1.0.5
+- `skills/plugin-develop` v0.9.2 → v0.9.3，第 18 节新增「命令契约」与「实施清单」两段（复核 master-web 源码后确认的可执行结论）：
+  - **命令契约**：`SetFrameInteraction` 一条命令 + `ExtPropsType` 全表（`Add=0/Update=1/Delete=2/Sort=4/DeleteAllInteractions=19`）；引擎按 `index` 或 `ids` **双通道**定位 interaction（UI 面板走 `index`、`deleteItems` 走 `ids`），故单条增删改**不需要新命令也不需要新 id 体系，只要透传真实 `index`**；overlay 是节点级写路径，payload 为**裸的** `{overlayPositionType}`（不带 `name:'prototype'`、不带 `data.value` 包装）；web 侧无创建连线的命令（UI 画线是引擎行为），插件是 web 侧唯一连线创建者
+  - **实施清单**：按「引擎 / 插件运行时 / apiConfig / 类型包 / 文档 E2E」五层拆出 11 条待办，含 `addReaction/updateReaction/removeReaction`、节点级 overlay API、`connector.startNode/endNode/detach/connectorTextMidpoint`、`SWAP_OVERLAY`、原子 `createConnector({start,end,reaction})`、flow 全套 + `findAll/findOne`、五个未登记 prop 补 `setterSchema`
+  - **新增一处现存不一致**：`plugin-typings` 里 `SectionNode extends DefaultContainerMixin`（含 `ReactionMixin`）声明了 `reactions`，但运行时 `layerFactory.ts:2213` 把 `definePropsPrototype` 注释掉了
+
+## [2026-09-23] v1.0.4
+- `skills/plugin-develop` v0.9.1 → v0.9.2，修正并充实第 18 节的「已知缺口」清单（逐条回读 master-web 源码复核）：
+  - **修正**：`reactions` 的只读/DevMode 门禁其实**没有漏**——未登记 apiConfig 的 prop 由 `setupSetterAndGetterDecorator` 默认兜底 `disabledWhenReadOnly: true`；真实缺口只是缺 `setterSchema` 类型校验
+  - **修正**：`overlay` 不在 interaction 上，而是 `PageReactionData` 的**节点级**字段（`OverlayPositionType` / `OverlayBackgroundInteractionType` 引擎均有）；原被注释的 overlay 转换读错了位置，属死代码
+  - **补充**：引擎已支持按 reaction id 删除（UI 自身即 `deleteItems(ids)`），因此 `removeReaction(id)` 不需要引擎改动；`index` 被写死为数组下标才导致只能整体覆盖
+  - **补充**：`connectorTextMidpoint` / `ConnectorTextMidpoint`、`SWAP_OVERLAY`、flow 全套命令（`addFlow`/`updateFlow`/`deleteFlow`/`sortFlow`）、插件缺 `findAll` 导致拿不到本页流程等结论，均标注了源码位置
+
 ## [2026-09-23] v1.0.3
 - `skills/plugin-develop` v0.9.0 → v0.9.1，从内部 `mastergo-plugin` skill 反向同步：
   - 新增 **第 18 节「连接线 / 原型连线（ConnectorNode）」**：`mg.createConnector()`、端点 `connectorStart/End`（自由端点 vs 吸附 `endpointNodeId` + `magnet`）、`connectorStart/EndStrokeCap`、`text` / `createText()`、`attachedConnectors`，并明确「连线与 `reactions` 是两套互不关联的 API」+ 列出已知缺口
