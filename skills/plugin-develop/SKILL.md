@@ -1,7 +1,7 @@
 ---
 name: mastergo-plugin-develop
 description: MasterGo 插件开发与 API 维护一体化 skill。覆盖两类场景：(A) 插件开发——从零创建插件项目结构、mg 全局 API 参考、节点类型、自动布局(flexMode)、组件/样式/团队库/字体/图片、DevMode 代码生成、UI 通信、调试与最佳实践；(B) 插件 API 变更同步——当 API 新增/修改/废弃时，按顺序跨三仓库更新 plugin-typings 类型发布 + mastergo-plugin-docs 开发者文档 + master-internal-plugins E2E 单测。触发词：mastergo 插件开发、插件 API、plugin api update、更新插件类型、更新插件文档、补充插件单测、同步插件 API、插件 API 变更、devmode 代码生成、mg.createFrame、flexMode 自动布局；插件审核、审核插件、处理插件审核、plugin audit、运行线上插件验证、插件合规审查。
-version: 0.9.2
+version: 0.9.3
 ---
 
 # MasterGo 插件开发与 API 维护
@@ -1042,6 +1042,27 @@ frameA.reactions = [{
    - flow（起点/流程图）一整套命令都有但没给插件：`addFlow` / `updateFlow` / `deleteFlow` / `sortFlow`（`manager/masterCommand/MasterGo.ts:494-561`）、`setCurrentReactions` / `clearReactions` / `resetInstanceReactions`（同文件 470/482/516），以及 cBridge 的 `getCurrentPageFlows` / `getLayerPrototype` / `getReactionById` / `getFrameReactions`（`packages/cBridge/src/prototype.ts`）。
    - **插件没有 `findAll` / `findOne`**（`manager/plugin/` 下零命中），只能 `getNodeById` 或从页面根逐层遍历子节点 → 拿不到「本页有哪些流程/起点」，只能猜。
 7. **`reactions` 的 index 语义**：`pluginReactionsToCppReactions` 把 index 写死成数组下标（`utils.ts:293`），所以只适合「整体覆盖」；要做单条增删改必须让引擎接受真实 id 或维护稳定的 index/realindex（`InteractionItem` 里既有 `index` 也有 `realindex`）。
+
+**命令契约（复核后确认，写实现时照这个来）**
+
+- 底层是**一条命令** `MasterCommand.SetFrameInteraction`，`ExtPropsType` 全表在 `core/master-instance/enum.ts:256`：`Add=0 / Update=1 / Delete=2 / UpdateAttribute=3 / Sort=4 / Append=5 / … / DeleteAllInteractions=19`。插件 bridge 只用了 0/1/2，`Sort(4)` 和 `DeleteAllInteractions(19)` 没用上。
+- **引擎按 `index` 或 `ids` 双通道定位 interaction**：UI 面板是 `addInteraction(eventType)` → `{name:'prototype', type:Add, value:{trigger}}`、`modifyInteraction(value, index)` → `{…, type:Update, value:{…value, index}}`、`deleteInteraction(index)` → `{…, type:Delete, value:{index}}`（`manager/masterCommand/model/layers.ts:179-211`）；而 `Reactions.deleteItems(ids)` → `{name:Reaction, type:Delete, value:{ids}}`（`baseNode/reactions.ts:8-16`）。所以**做单条增删改不需要新命令，也不需要新 id 体系，只要透传引擎真实 `index`**（`InteractionItem` 同时有 `index` 和 `realindex`）。
+- **overlay 是另一条写路径**：`setOverlayPosition` / `toggleClickOverlayOuterCloseOverlay` / `toggleAddMaskBehindOverlay` / `setMaskColor` 同样发 `SetFrameInteraction`，但 payload 是**裸的** `{overlayPositionType}` / `{backgroundInteraction}` / `{backgroundType}` / `{color}` —— 不带 `name:'prototype'`、不带 `data.value` 包装（`manager/masterCommand/model/baseNode/index.ts:1133-1158`）。别照抄 reactions 那套包装。
+- **web 侧没有创建连线的命令**：UI 里画线是引擎（C++）行为，web 只读 —— `cBridge.getSelectConnectorLayerIds` / `getSelectConnectorTextLayerIds`、`getLayerProperties(['connectorStart','connectorEnd'])`（`views/prototyping/components/hooks/`）；`connectorEndPoint` 这条命令**只在插件 bridge 出现**（`bridge/index.ts:1942`）。即插件是 web 侧唯一的连线创建者，原子创建 API 的必要性比一般属性 API 更高。
+
+**实施清单（要做的事，按层拆；P0 未完成前插件做不出与 UI 等价的连线）**
+
+1. **引擎**（唯一必须引擎配合的一条）：interaction ↔ connector 互存 id。其余全部落在 web 插件层 + 类型包 + 文档。
+2. **reaction 的增删改**：`apiPropsPrototype.ts` 加 `addReaction / updateReaction(index, patch) / removeReaction(index)`；`utils.ts` 两个转换函数透传引擎真实 `id`/`index`（现在的数组下标即根因）。
+3. **overlay 按节点级补 API**，复用上面那条裸 payload 写路径；读走 `LayerPrototypeById(id).data.overlay`。
+4. **连线便利属性**：`connector.startNode / endNode`、`connector.detach()`、`connector.connectorTextMidpoint`、`Navigation` 加 `'SWAP_OVERLAY'`。
+5. **原子创建**：`mg.createConnector({start, end, reaction})`，把现在的四条命令合并（`createConnector()` → `connectorStart=` → `connectorEnd=` → `addPrototypeProps` + `modifyPrototypeProps`）。
+6. **flow 一整套**暴露给插件（`addFlow/updateFlow/deleteFlow/sortFlow`、`setCurrentReactions/clearReactions/resetInstanceReactions`，`MasterGo.ts:470-561`）+ 查询侧（`getCurrentPageFlows`/`getLayerPrototype`/`getReactionById`/`getFrameReactions`），并配套 `findAll`/`findOne`（现在零命中，只能从页面根逐层遍历）。
+7. **apiConfig 注册**：`reactions` 要补 `setterSchema`；`connectorStart` / `connectorEnd` / `connectorStartStrokeCap` / `connectorEndStrokeCap` / `cornerRadius` **这五个目前也都没登记**（同样只靠默认兜底，无 schema 校验）；overlay 三个字段新增条目。`attachedConnectors` 已有。
+8. **CONNECTOR 是否承载交互**要定夺：要么在 `ensureConnectorPrototype` 里补 `definePropsPrototype`，要么在 typings 明确写「连线不承载交互」。
+9. **`~/code/mg/plugin-typings`（公共契约，独立仓库、要发版）**：`ReactionMixin.reactions` 现为 `ReadonlyArray<Reaction>`（只读）而运行时已有 setter；`Reaction` 缺 `id`/`overlay`（**整个 typings 没有 Overlay 类型**）；`createConnector(): ConnectorNode` 无参数；`ConnectorNode` 缺 `reactions/startNode/endNode/detach/connectorTextMidpoint`；`navigation` 枚举缺 `SWAP_OVERLAY`。
+10. **typings 与运行时不一致（现存 bug）**：`SectionNode extends DefaultContainerMixin`（含 `ReactionMixin`）→ typings 声明 section 有 `reactions`，但运行时 `layerFactory.ts:2213` 把 `definePropsPrototype` 注释掉了。要么放开、要么从 typings 摘掉，别留着。
+11. **文档 / E2E**：`mastergo-plugin-docs` 补 API 说明；`master-internal-plugins` 加连线 + 交互 + 浮层 + 级联删除的 E2E（按第 19 节四阶段同步）。
 
 改这条链路时要同步的源码：
 
