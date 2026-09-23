@@ -1,7 +1,7 @@
 ---
 name: mastergo-plugin-develop
-description: MasterGo 插件开发与 API 维护一体化 skill。覆盖两类场景：(A) 插件开发——从零创建插件项目结构、mg 全局 API 参考、节点类型、自动布局(flexMode)、组件/样式/团队库/字体/图片、DevMode 代码生成、UI 通信、调试与最佳实践；(B) 插件 API 变更同步——当 API 新增/修改/废弃时，按顺序跨三仓库更新 plugin-typings 类型发布 + mastergo-plugin-docs 开发者文档 + master-internal-plugins E2E 单测。触发词：mastergo 插件开发、插件 API、plugin api update、更新插件类型、更新插件文档、补充插件单测、同步插件 API、插件 API 变更、devmode 代码生成、mg.createFrame、flexMode 自动布局。
-version: 0.9.0
+description: MasterGo 插件开发与 API 维护一体化 skill。覆盖两类场景：(A) 插件开发——从零创建插件项目结构、mg 全局 API 参考、节点类型、自动布局(flexMode)、组件/样式/团队库/字体/图片、DevMode 代码生成、UI 通信、调试与最佳实践；(B) 插件 API 变更同步——当 API 新增/修改/废弃时，按顺序跨三仓库更新 plugin-typings 类型发布 + mastergo-plugin-docs 开发者文档 + master-internal-plugins E2E 单测。触发词：mastergo 插件开发、插件 API、plugin api update、更新插件类型、更新插件文档、补充插件单测、同步插件 API、插件 API 变更、devmode 代码生成、mg.createFrame、flexMode 自动布局；插件审核、审核插件、处理插件审核、plugin audit、运行线上插件验证、插件合规审查。
+version: 0.9.1
 ---
 
 # MasterGo 插件开发与 API 维护
@@ -974,6 +974,74 @@ await mg.loadFontAsync({ family: 'PingFang SC', style: 'Regular' });
 // hasMissingFont (只读), setRange* 系列方法
 ```
 
+### 18. 连接线 / 原型连线（ConnectorNode）
+
+类型标识 `'CONNECTOR'`，`mg.createConnector()` 创建。
+
+⚠️ **MasterGo 的「原型连线」在插件 API 侧是两套相互独立的能力**，没有 connectorId 之类的关联字段：
+UI 里拉一条线会同时生成 CONNECTOR 节点 **+ 起点节点上的一条 reaction**，但插件必须自己分别创建和维护这两者。
+
+```typescript
+const connector = mg.createConnector();
+
+// === 端点 connectorStart / connectorEnd ===
+type ConnectorEndpoint =
+  | { position: { x: number; y: number } }                                    // 自由端点（未吸附加）
+  | { position: { x: number; y: number }; endpointNodeId: string;
+      magnet: 'TOP' | 'LEFT' | 'BOTTOM' | 'RIGHT' };                          // 吸附到节点
+
+connector.connectorStart = { position: { x: 100, y: 100 } };
+connector.connectorEnd = { endpointNodeId: frameB.id, magnet: 'LEFT', position: { x: 0, y: 0 } };
+// 注意：给了 endpointNodeId 时 position 被忽略；endpointNodeId 为空串时才按 position 走
+
+// === 端点样式（箭头/圆点等）===
+connector.connectorStartStrokeCap = 'NONE';
+connector.connectorEndStrokeCap = 'TRIANGLE_ARROW';
+// 'NONE' | 'ROUND' | 'SQUARE' | 'LINE_ARROW' | 'TRIANGLE_ARROW' | 'ROUND_ARROW' | 'RING' | 'DIAMOND' | 'LINE'
+
+// === 连线上的文字（懒创建，返回 TextSublayerNode）===
+const text = connector.createText();     // 重复调用返回同一个子层
+connector.text.characters = '点击跳转';
+
+// === 反向查询：任意 SceneNode 上挂了哪些连线（只读）===
+const lines = frameA.attachedConnectors; // ConnectorNode[]
+```
+
+其余 `cornerRadius` / `strokes` / `opacity` / `isVisible` / `isLocked` / 导出属性与通用节点一致。
+
+**交互动作（跳转、浮层、返回…）挂在起点节点的 `reactions` 上，不在连线上**（类型见第 15 节）：
+
+```typescript
+frameA.reactions = [{
+  trigger: { type: 'ON_CLICK', delay: 0 },
+  action: { type: 'NODE', destinationId: frameB.id, navigation: 'NAVIGATE' },
+}];
+```
+
+限制与坑：
+
+- CONNECTOR 的原型对象（`ensureConnectorPrototype`）**没有** `definePropsPrototype`，即 `connector.reactions` 不存在：读不到、写了也无效。SECTION 节点的 `reactions` 同样被注释掉未启用。
+- `createFrame` / `createComponent` / `group` / 布尔运算等 API 显式禁止传入 CONNECTOR 子节点（schema pattern `^(?!CONNECTOR).*$`）。
+- `mg.createConnector()` 不校验参数，创建后落在当前页面，端点默认是空的；只给两端 `position` 是自由连线，要吸附必须给 `endpointNodeId` + `magnet`。
+- `reactions` 的 setter 是**整体覆盖**：先删除该节点已有全部交互再重建，不是增量追加。
+
+**已知缺口**（要让插件做出与 UI 等价的原型连线，至少还缺这些；优先级从高到低）：
+
+1. **连线与交互无绑定字段**（阻塞）：引擎 `InteractionItem` / `CppReaction` 都没有 connectorId，插件建的线是「死线」——删线不删交互、删交互不删线。需引擎侧互存 id，再暴露 `connector.reaction` / `Reaction.connectorId`。
+2. **缺原子创建 API**：现需 `createConnector` + 两次 `setConnectorEndPoint` + `addPrototypeProps` 四步、四条命令、中间态会闪。建议 `mg.createConnector({ start, end, reaction })`。
+3. **reaction 无 id**：`CppReaction.id` 引擎有但未暴露（cBridge 也有 `getReactionById`），导致只能整体覆盖，无法增删改单条。
+4. **overlay（浮层）读写全丢**：`cppReationToPluginReation` 里 overlay 转换整段被注释（utils.ts ~207），`pluginReactionsToCppReactions` 也不转 → 浮层位置/遮罩/点击外部关闭在插件侧既读不到也写不了。
+5. **`reactions` 没进 apiConfig**：无 schema 校验、无 `disabledWhenReadOnly`，只读/DevMode 下仍可写（其他写操作走 `pluginDecorator(_, true)`）。
+6. 缺 `startNode` / `endNode` 直接引用（现在只有 `endpointNodeId`，要再 `getNodeById`）；缺 `connector.detach()`；`Navigation` 插件侧缺 `'SWAP_OVERLAY'`；页面级 flow/流程数据（`getCurrentPageFlows` / `getLayerPrototype`）未暴露给插件。
+
+改这条链路时要同步的源码：
+
+- `apps/web/src/manager/plugin/runtime/apiNodeConnector.ts` — 端点、strokeCap、连线文字
+- `apps/web/src/manager/plugin/runtime/apiPropsPrototype.ts` — `reactions`
+- `apps/web/src/manager/plugin/runtime/layerFactory.ts` — `ensureConnectorPrototype` / `defineAttachedConnectors`
+- `apps/web/src/manager/plugin/typesForPlugin.ts` — `ConnectorEndpoint` / `Reaction`
+- `apps/web/src/manager/plugin/typesForCpp.ts` — `CppConnectorEndPoint` / `ConnectorMagnet`
+
 ## 开发指南补遗
 
 Skill 正文已覆盖从零搭建插件项目、manifest.json 配置、TypeScript 支持、调试等基础流程（参见 `assets/` 模板和 `references/development-guide.md`）。以下是官方文档中 Skill 正文未展开但值得了解的补充主题：
@@ -1150,7 +1218,7 @@ yarn add @mastergo/plugin-typings
 本技能通过环境变量定位项目路径，**使用前必须设置** `MG_DOCS_ROOT`：
 
 ```bash
-export MG_DOCS_ROOT=/Users/liyanfeng/code/mg/mg-docs
+export MG_DOCS_ROOT=~/code/mg/mg-docs
 ```
 
 如需为单个项目覆盖路径，可额外设置：
@@ -1380,3 +1448,356 @@ cd $MG_DOCS_ROOT/master-internal-plugins && pnpm build-e2e-test
 # master-internal-plugins 启动测试服务
 cd $MG_DOCS_ROOT/master-internal-plugins && pnpm serve
 ```
+
+---
+
+## 附录 A · 插件 API 同步维护工作流（原 mastergo-plugin-api）
+
+# MasterGo 插件 API
+
+## Overview
+
+当 MasterGo 插件 API 发生变更时，按以下流程同步更新三处内容：
+
+1. 插件 API 类型定义（plugin-typings）
+2. 插件开发者文档（mastergo-plugin-docs）
+3. 插件单测（master-internal-plugins）
+
+## 配置
+
+项目路径通过环境变量配置，优先从环境变量读取，未设置时使用默认值：
+
+| 环境变量 | 默认值 | 说明 |
+|----------|--------|------|
+| `MASTERGO_PLUGIN_TYPINGS_PATH` | `~/code/mg/mg-docs/plugin-typings` | 插件 API 类型项目 |
+| `MASTERGO_PLUGIN_DOCS_PATH` | `~/code/mg/mg-docs/mastergo-plugin-docs` | 插件开发者文档项目 |
+| `MASTERGO_INTERNAL_PLUGINS_PATH` | `~/code/mg/mg-docs/master-internal-plugins` | 插件单测项目 |
+
+在执行脚本时使用以下方式读取路径：
+
+```bash
+PLUGIN_TYPINGS="${MASTERGO_PLUGIN_TYPINGS_PATH:-~/code/mg/mg-docs/plugin-typings}"
+PLUGIN_DOCS="${MASTERGO_PLUGIN_DOCS_PATH:-~/code/mg/mg-docs/mastergo-plugin-docs}"
+INTERNAL_PLUGINS="${MASTERGO_INTERNAL_PLUGINS_PATH:-~/code/mg/mg-docs/master-internal-plugins}"
+```
+
+## 工作流程
+
+API 变更时按顺序执行以下步骤。
+
+### 0. 准备分支
+
+三个项目都基于最新 `origin/master` 创建新分支（分支名按变更主题命名，如 `feat_team_library_api_enhance`），不要在历史 feature 分支上继续提交，避免和未合并的旧改动混在一起。
+
+```bash
+for proj in plugin-typings mastergo-plugin-docs master-internal-plugins; do
+  git -C "$MASTERGO_DOC_ROOT/$proj" fetch origin master
+  git -C "$MASTERGO_DOC_ROOT/$proj" checkout -b <新分支名> origin/master
+done
+```
+
+### 1. 更新插件 API 类型
+
+项目地址：`$MASTERGO_PLUGIN_TYPINGS_PATH`（默认 `~/code/mg/mg-docs/plugin-typings`）
+
+操作：
+- 类型定义集中在根目录的 `plugin.d.ts`（不在 `src/` 下）
+- 类型变更涉及新增/修改/删除接口、类型、枚举、常量等
+- 确保类型定义与 MasterGo 插件运行时（master-web `apps/web/src/manager/plugin/typesForPlugin.ts`、`typesForCpp.ts`）保持一致
+- 可选字段统一加 `?`，并在注释中标注「老库/旧版本可能缺省」
+
+### 2. 更新插件开发者文档
+
+项目地址：`$MASTERGO_PLUGIN_DOCS_PATH`（默认 `~/code/mg/mg-docs/mastergo-plugin-docs`）
+
+操作：
+- 同步更新文档中涉及 API 变更的部分
+- 包括 API 说明、示例代码、变更日志等
+- 文档中的代码示例与类型定义保持一致
+- 涉及到的文档目录：
+  - `docs/apis/mastergo.md` — API 说明（函数签名 + 简介）
+  - `docs/types/<相关类型>.md` — 类型定义文档（与 plugin.d.ts 一一对应）
+  - `docs/updates/index.md` — changelog（顶部追加新版本小节）
+
+### 3. 更新插件单测
+
+项目地址：`$MASTERGO_INTERNAL_PLUGINS_PATH`（默认 `~/code/mg/mg-docs/master-internal-plugins`）
+
+操作：
+- 更新单测用例以适配新的 API
+- 确保测试覆盖新增/修改的 API 功能
+- 运行 e2e 测试验证
+- 若新增字段在老库可能缺省，断言时不要直接加入 `include.all.keys`，应单独判断存在性
+
+### 4. 提交并创建 MR/PR
+
+- 三个项目分别提交到各自的新分支并推送
+- plugin-typings 托管在 **GitHub**（`mastergo-design/plugin-typings`），用 `gh pr create` 创建 PR 到 `master`
+- mastergo-plugin-docs / master-internal-plugins 托管在 **GitLab**（`master/frontend/*`），用 GitLab API 创建 MR 到 `master`
+- MR 描述中互相引用关联 MR/PR 链接
+
+## 关键类型/文档对照表
+
+常见 API 变更涉及的类型定义和文档位置（便于快速定位）：
+
+| 变更主题 | plugin.d.ts 位置 | mastergo-plugin-docs 位置 |
+|---|---|---|
+| 团队库 `getTeamLibraryAsync` | `TeamLibrary` / `TeamLibraryComponent` / `TeamLibraryStyle` | `docs/types/teamLibrary.md` / `docs/apis/mastergo.md` |
+| 组件属性 `componentPropertyValues` | `ComponentPropertyValue` / `ComponentPropertyType` | `docs/types/componentPropertiesRelated.md` |
+| 变量 `variables` | `Variable` / `VariableAlias` / `VariableVariable` | `docs/types/variable.md` |
+| 样式 `styles` | `PaintStyle` / `EffectStyle` / `TextStyle` / `GridStyle` | `docs/types/style.md` |
+| 节点属性 | `ComponentNode` / `FrameNode` / `TextNode` 等 | `docs/types/node.md` |
+
+## 案例：getTeamLibraryAsync 暴露 properties/textNodeNames/values
+
+2026/07 的典型同步案例。master-web 为 `getTeamLibraryAsync` 增强返回结构后，三处同步更新：
+
+| 改动项 | plugin-typings（plugin.d.ts） | mastergo-plugin-docs |
+|---|---|---|
+| 组件属性 | `TeamLibraryComponent` 加 `properties?: ComponentPropertyValue[]`、`textNodeNames?: string[]` | `types/teamLibrary.md` 的 TeamLibraryComponent 章节 |
+| 样式值 | `TeamLibraryStyle` 加 `values?: ReadonlyArray<TeamLibraryStyleValue>`，新增 `TeamLibraryStyleValue` 接口 | `types/teamLibrary.md` 的 TeamLibraryStyle 章节 + value 形态对照表 |
+| 组件属性变量绑定 | `ComponentPropertyValue` 加 `variableId?: string` | `types/componentPropertiesRelated.md` |
+| API 说明 | — | `apis/mastergo.md` 的 getTeamLibraryAsync 章节 |
+| changelog | — | `updates/index.md` 顶部新增版本小节 |
+
+关键约定：
+- `values` 中 `value` 字段类型用 `any`（与 master-web 运行时一致），文档中以表格形式说明各样式分类的 value 形态
+- 老库可能缺省的字段在类型上加 `?`，文档中显式注明「老库可能缺省」
+- 变量引用项或解析异常时 `value` 为 `undefined`，文档中需明确说明
+
+## 测试命令
+
+**前提：所有命令必须先进入 `$MASTERGO_INTERNAL_PLUGINS_PATH` 目录执行**（默认 `~/code/mg/mg-docs/master-internal-plugins`）：
+
+```bash
+cd "${MASTERGO_INTERNAL_PLUGINS_PATH:-~/code/mg/mg-docs/master-internal-plugins}"
+```
+
+启动单测服务需要执行**两个命令**（各占一个终端/后台）：
+
+1. **构建并启动 e2e 测试服务**（构建测试插件 + 提供 HTTPS 插件托管）：
+   ```bash
+   pnpm build-e2e-test && pnpm serve
+   ```
+   - `build-e2e-test`：webpack 构建 `plugin-api-e2e-test` 包 → `dist/code.js` + `dist/ui.html`
+   - `serve`：在 `https://localhost:7733/pluginUrl` 托管构建产物（express + TLS，使用 cert.pem/key.pem）
+
+2. **启动 websocket 服务**（插件 ↔ 宿主通信通道，调试用）：
+   ```bash
+   pnpm serve-websocket
+   ```
+   - 在 `ws://localhost:50678` 启动 websocket 服务，自动通过 mkcert 签发证书（`ensure-ws-cert.mjs`）
+
+3. **在画布中加载并运行测试插件**：上述两个服务都启动后，在 MasterGo 画布（浏览器 DevTools Console）中执行：
+   ```js
+   window.runNewPlugin('https://localhost:7733/pluginUrl', true)
+   ```
+   - 加载后插件 UI 面板出现，点击触发 `unit-test` 消息即可执行测试用例，结果通过 websocket 回传到面板。
+
+**注意**：前两个命令是长期运行的服务进程，应使用后台任务（`run_in_background`）或独立终端运行，不要阻塞当前会话。改完代码后需重新 `pnpm build-e2e-test` 再重新 `pnpm serve` 才能生效（步骤 3 的 `window.runNewPlugin` 需在每次重新 serve 后重新执行）。
+
+---
+
+## 附录 B · 插件社区审核工作流（原 mastergo-plugin-audit）
+
+# MasterGo 插件审核
+
+## Overview
+
+参考 SOP：`插件审核流程`（飞书 wiki `ROtJwtQyNiPwipkTijccLHdgnaf`）。
+
+- 待审核列表页面：`https://mastergo.com/admin/home/resource_center/plugin_audit`（无权限找袁博开通）
+- 审核原则：**优先处理合规审核通过的插件**（status=1）；插件通过的前提是**在 dev 环境运行插件，运行结果与插件描述一致**。
+- **本 skill 不自行为插件判通过/不通过**：只负责把插件的**运行验证结果**跑出来（能否运行、运行 UI、控制台错误、与描述是否一致），把结果交给审核人；审核人明确要求"通过/不通过"时才执行审核操作。
+- 特殊情况：插件有问题需要下架的，找杨鹏帮忙；程序自动合规审核用的是网易易盾。
+
+## 前置条件
+
+1. 本地 Chrome 已登录 `mastergo.com`（admin 账号有插件审核权限），且已打开 `dev.mastergo.com/file/:id`（dev 环境，插件审核页的文件）并保持登录。
+2. 脚本通过解密本地 Chrome Cookies 获取会话凭证访问 admin API。
+   - macOS 下 Chrome Safe Storage 口令在钥匙串，可通过 `security find-generic-password -w -a Chrome -s "Chrome Safe Storage"` 获取。
+   - 口令**必须**通过环境变量 `MG_CHROME_SAFE_STORAGE_PASSWORD` 注入，脚本不内置任何默认值。
+   - cookie 数据库路径**必须**通过 `MG_CHROME_COOKIES_DB` 注入（如 `$HOME/Library/Application Support/Google/Chrome/Default/Cookies`）。
+3. 需要 Node.js ≥ 18（使用内置 `fetch` 与 `node:sqlite`）。
+4. 自动运行（`--run`）需要：
+   - 本地 Chrome 开了 CDP（默认 `http://127.0.0.1:9222`，`MG_CDP_ENDPOINT` 可覆盖）且已打开 dev 画布页。复用 `mastergo-web-automation` skill「无浏览器 MCP 时自起 Chrome + CDP + cookie 注入」章节启动并注入登录态。
+   - `mastergo-cli` 已构建，并用 `MG_CLI_PATH` 或 `--cli <path>` 指定其 `dist/cli.js` 入口（脚本不内置本机路径）。该 CLI 封装了「运行线上插件」的 CDP 驱动（`plugin run-online` 子命令）。
+
+## 工作流程
+
+### 1. 拉取待审核列表
+
+```bash
+node scripts/list.js            # 默认拉取 status=1,2（人工审核中）
+node scripts/list.js 0          # 合规审核中
+node scripts/list.js 3          # 已发布
+node scripts/list.js 4          # 审核未通过
+```
+
+status 含义：
+| status | 含义 | 优先级 |
+|--------|------|--------|
+| 0 | 合规审核中（网易易盾自动审核） | 等自动审核出结果 |
+| 1 | 人工审核中，**合规已通过** | **优先处理** |
+| 2 | 人工审核中，合规未通过（`audit_reason` 有理由） | 需复审，一般按合规理由拒绝 |
+| 3 | 已发布 | — |
+| 4 | 审核未通过 | — |
+
+**优先处理 status=1 的插件**。status=2 的插件合规未通过，需结合 `audit_reason`（如"违禁"、"广告"）人工复审，通常直接拒绝并写明原因。
+
+### 2. 查看插件基本信息
+
+```bash
+node scripts/detail.js <plugin_id>
+node scripts/detail.js <plugin_id> --raw   # 原始 JSON
+```
+
+重点核对：
+- **插件名称 / 描述 / 分类 / 封面**：描述是后续"运行结果与描述一致"的比对基准。
+- **manifest**：`permissions` 申请的权限是否与功能匹配（如 `currentuser` 需当前用户信息，`activeusers` 需协同用户列表）；`editorType` 是否合理。
+- **联系方式 / 作者**：是否真实可联系。
+- **审核次数 / 合规理由**：多次被拒或合规未通过的要谨慎。
+
+### 3. 静态代码审查（辅助，供运行验证参考）
+
+```bash
+node scripts/scan.js <plugin_url> [输出目录]
+```
+
+扫描输出项与判读：
+- **外部域名引用**：出现非 mastergo 官方域、非开源许可文档域的链接要逐一确认用途。
+  - 常见合规外链：开源协议/文档站（opensource.org、apache.org、github.com、w3.org、vuejs.org、schema.org 等）——通常只是注释或文档，安全。
+  - **风险外链**：
+    - 打赏/捐赠/支付（ifdian.net 爱发电、paypal、自定义支付页）——平台视为"广告/引流"，是合规未通过（reason="广告"）的典型原因。
+    - 激活码/授权服务器（如 `ohjio.com` 之类提供激活码校验的站点）——插件内私设付费授权机制，属违规。
+    - 私有 websocket 中继 + 强制注册登录（如 Design Mirror 的 `psmirror.cn`）——功能型外部依赖，需评估数据是否会上传。
+- **危险模式**：
+  - `document.cookie` 读写 / `localStorage` 存取用户数据后外发——**数据窃取**，必须拒绝。
+  - `fetch`/`XMLHttpRequest` 向外部域名 POST 用户画布数据——**数据外泄**，必须拒绝。
+  - `sendBeacon`、`indexedDB`、`new WebSocket` 等——需看数据流向。
+  - `eval`/`new Function`——大多来自框架（vue-i18n、three.js 等），需确认不是动态执行外部代码。
+- **mg.\* 插件 API 调用**：确认只用官方 API（`mg.showUI`、`mg.document`、`mg.ui`、`mg.notify`、`mg.exportAsync` 等）。
+- **中文 UI 文本**：扫描界面文案，排查涉政、色情、赌博、诈骗、诱导分享等违规内容。
+
+> 静态审查结论只作为**运行验证的参考线索**（哪里要重点看），不作为通过/不通过的唯一依据。
+
+### 4. 【核心】在 dev 环境运行插件验证
+
+SOP 要求：先在审核平台复制插件内容，然后到 dev 画布通过「运行线上插件」流程实际运行，**运行结果须与插件描述一致**。只有 dev 环境有"运行线上插件"入口。
+
+**流程原理**（已核对 master-web 源码，`apps/web/src/views/plugin/run-online-plugin/RunOnlinePlugin.vue` + `views/main/file/util/tool.ts` + `views/components/plugin/pluginDock.vue`）：
+顶栏插件入口 `.mas-tool-plugin` → 菜单「运行线上插件」（仅 dev 环境显示）→ 弹窗文本域 `.run-online-plugin__input` 粘贴插件 JSON → **输入框失焦**（`handleBlur` 触发 `JSON.parse` → `addInstalledPlugin`）→ 左下角/面板生成插件图标 `.plugin-item` → 点击图标 → `pluginManager.openPlugin` 开始运行。插件 JSON 即审核列表接口的行对象（含 `plugin_id/plugin_name/plugin_manifest/plugin_logo/plugin_url/editor_type` 等，**`JSON.stringify(行对象)` 与审核平台「复制插件」按钮复制的内容一致**）。
+
+**4a. 自动运行（推荐）**
+
+```bash
+# 1) 生成待粘贴 JSON（即「复制插件」内容），先确认能正常产出
+node scripts/run-online.js <plugin_id> --prepare
+
+# 2) 自动驱动 dev 画布运行（内部调用 mastergo-cli plugin run-online，需 9222 CDP 已开 dev 画布页）
+node scripts/run-online.js <plugin_id> --run --out plugin-<plugin_id>.png --wait 8000
+```
+
+`--run` 输出结构化运行验证结果：
+```json
+{
+  "plugin_id": 184056858911118,
+  "plugin_name": "Simple 3D 矢量转2.5D~3D图形",
+  "run_step": "run",
+  "run_ok": true,
+  "run_msg": "已点击插件图标，触发运行",
+  "plugin_frame": "blob:https://dev.mastergo.com/...",
+  "screenshot": "plugin-184056858911118.png",
+  "console_errors": []
+}
+```
+- `run_ok:false` + `run_step` 表明卡在哪个环节（`entry`=无顶栏插件入口 / `menu`=无运行线上插件菜单 / `textarea`=无输入框 / `icon`=失焦后未生成图标，JSON 可能不合法）。
+- `plugin_frame` 非空表示插件 UI iframe 已加载。
+- `console_errors` 列出运行期间控制台 error/warning（超出 200 条截断，最多保留 20 条）。
+- `screenshot` 为插件运行后的整页截图（含插件 UI 浮层），用于肉眼/视觉确认插件实际运行效果。
+
+**4b. 手动运行（自动失败/兜底）**
+
+打开 dev 画布 → 顶栏插件入口 → 运行线上插件 → 把 `--prepare` 输出的 JSON 粘贴到"插件内容"输入框 → 点击输入框外任意处（触发失焦）→ 等左下角/面板出现插件图标 → 点击图标运行。
+
+**观察要点**：
+- 插件能否正常启动、UI 是否渲染（截图确认）。
+- 功能与插件描述是否一致（描述说导出 SVG，实际能否导出）。
+- 运行中是否弹出违规内容、广告、外部跳转、诱导登录/付费。
+- 是否在异常收集数据（控制台网络请求、`console_errors`）。
+
+### 5. 输出运行验证结果（不自行审核）
+
+把第 4 步产出的运行验证结果**如实汇总输出**，包括：
+- 插件是否能运行、运行卡点（`run_ok` / `run_step` / `run_msg`）。
+- 插件 UI iframe 是否加载（`plugin_frame`）。
+- 运行截图（`screenshot`）。
+- 控制台 error/warning（`console_errors`）。
+- **运行结果与插件描述的一致性观察**（哪些点一致、哪些点不符合）。
+- 静态审查（第 3 步）发现的值得注意点（外部域名/危险模式），供审核人综合判断。
+
+**本 skill 到此为止，不调用 audit.js 判通过/不通过**。把以上验证结果交给审核人（用户）。
+
+### 6. 执行审核操作（仅在用户明确要求时）
+
+用户基于运行验证结果明确要求"通过/不通过"后，才执行：
+
+```bash
+node scripts/audit.js <plugin_id> pass                    # 审核通过（发布至插件社区）
+node scripts/audit.js <plugin_id> reject "不通过原因"      # 审核不通过（开发者会看到原因）
+```
+
+- 通过：确认弹窗提示"审核通过后，{插件名}插件将发布至插件社区，请谨慎操作"。**通过即发布，务必谨慎**。
+- 不通过：必须写明原因（≤500 字），开发者将收到审核结果。
+
+API 参考（供脚本维护用）：
+| 操作 | 方法 | 路径 | 参数/body |
+|------|------|------|-----------|
+| 列表 | GET | `/admin/community/api/plugin/audit/list` | `status, page_num, page_size, start_time, end_time, author_id, plugin_id` |
+| 详情 | GET | `/admin/community/api/plugin/audit/detail` | `plugin_id` |
+| 审核 | POST | `/admin/community/api/plugin/audit` | 通过 `{plugin_id, status:3}`；拒绝 `{plugin_id, status:4, audit_msg}` |
+
+响应 `{"code":"OK"}` 即成功。
+
+## 审查红线（遇到即提醒，不自行拒绝）
+
+1. 窃取用户数据：读取画布/用户信息后发送到外部服务器。
+2. 植入恶意代码：eval 执行外部下发的代码、动态注入脚本。
+3. 私设付费墙：激活码、私服授权、强制跳转支付（合规易盾会标"广告"）。
+4. 违规内容：涉政、色情、赌博、诈骗、诱导分享。
+5. 与描述不符：manifest 权限申请远超功能需要，或功能名不副实。
+
+以上红线项在运行验证结果中**如实标注**（如"检测到外部域名 X，疑似打赏页"），由审核人决定是否拒绝。
+
+## 脚本清单
+
+| 脚本 | 作用 |
+|------|------|
+| `scripts/mg-auth.js` | 解密 Chrome cookie，构造 admin API 认证头 |
+| `scripts/list.js` | 拉取待审核列表（按 status 过滤） |
+| `scripts/detail.js` | 获取插件审核详情 |
+| `scripts/scan.js` | 下载插件包 + 静态代码审查扫描 |
+| `scripts/run-online.js` | 生成「运行线上插件」JSON（`--prepare`），或调用 mastergo-cli 自动驱动 dev 画布运行（`--run`） |
+| `scripts/audit.js` | 执行审核通过/不通过（**仅用户明确要求时**） |
+
+> **前置环境变量**（`mg-auth.js` 只会读环境变量，不含任何内置凭据）：
+>
+> ```bash
+> export MG_CHROME_SAFE_STORAGE_PASSWORD="$(security find-generic-password -w -a Chrome -s 'Chrome Safe Storage')"
+> export MG_CHROME_COOKIES_DB="$HOME/Library/Application Support/Google/Chrome/Default/Cookies"
+> ```
+>
+> 两者都必填，缺失时脚本会直接报错并给出上面的命令，不会回退到任何硬编码值。
+
+## 常见问题
+
+- **403/401**：cookie 过期或未登录 admin 账号，重新在 Chrome 登录 mastergo.com。
+- **`Value is too large...`**：读 cookies 库时 `expires_utc` 溢出，SQL 里用 `CAST(expires_utc AS TEXT)` 避免（脚本已处理）。
+- **解密出乱码**：Chrome 加密方案是 `v10 + 16字节IV + AES-128-CBC`，解密后要再**去掉 16 字节常量前缀**才是 cookie 值（脚本已处理）。
+- **插件包不是 zip 而是 HTML/JS**：MasterGo 插件包构建后可能以单文件 HTML/JS 形式存储，直接按文本扫描即可。
+- **找不到审核页面权限**：找袁博开通 admin 插件审核权限。
+- **需要下架已发布的问题插件**：找杨鹏协助。
+- **`--run` 报"未找到顶栏插件入口"**：当前 CDP 打开的页面不是 dev 画布 `/file/:id` 页，或页面还没加载完；确认浏览器已打开 dev.mastergo.com 的 /file 页。
+- **`--run` 报"未找到运行线上插件菜单项"**：当前不是 dev 环境（生产环境无此入口）；确认是 dev.mastergo.com。
+- **`--run` 报"失焦后未生成插件运行图标"**：粘贴的 JSON 不是审核行对象（`JSON.parse` 失败或字段缺失）；用 `--prepare` 重新生成。
+- **找不到 mastergo-cli**：到 `~/ZCodeProject/mastergo-cli` 执行 `pnpm build`，或用 `MG_CLI` 指定 dist/cli.js 路径。

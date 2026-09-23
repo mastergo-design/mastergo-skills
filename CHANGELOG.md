@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026-09-23] v1.0.3
+- `skills/plugin-develop` v0.9.0 → v0.9.1，从内部 `mastergo-plugin` skill 反向同步：
+  - 新增 **第 18 节「连接线 / 原型连线（ConnectorNode）」**：`mg.createConnector()`、端点 `connectorStart/End`（自由端点 vs 吸附 `endpointNodeId` + `magnet`）、`connectorStart/EndStrokeCap`、`text` / `createText()`、`attachedConnectors`，并明确「连线与 `reactions` 是两套互不关联的 API」+ 列出已知缺口
+  - `references/node-types.md` 新增 CONNECTOR 属性表
+  - 同步 2026-08-15 之后的其它累积更新（第 14 节 WebSocket 等）
+  - 新增 `scripts/`（附录 B 插件社区审核工作流的配套脚本）；`mg-auth.js` 已脱敏：Chrome Safe Storage 口令与 Cookies 库路径改为必填环境变量，移除仓库内的硬编码值
+
 ## [2026-08-15] v1.0.2
 - `skills/dsl-to-code` v0.1.1 → v0.1.2，新增 **getDslByLayerIds 队列能力**（skill 侧脚本能力，无需等服务端新增 MCP 工具）：
   - `scripts/mcp-batch-fetch.mjs` 新增 `--concurrency N` 并发队列（默认 2，`MCP_FETCH_CONCURRENCY` 可覆盖）
