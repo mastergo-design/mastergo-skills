@@ -1,7 +1,7 @@
 ---
 name: mastergo-plugin-develop
 description: MasterGo 插件开发与 API 维护一体化 skill。覆盖两类场景：(A) 插件开发——从零创建插件项目结构、mg 全局 API 参考、节点类型、自动布局(flexMode)、组件/样式/团队库/字体/图片、DevMode 代码生成、UI 通信、调试与最佳实践；(B) 插件 API 变更同步——当 API 新增/修改/废弃时，按顺序跨三仓库更新 plugin-typings 类型发布 + mastergo-plugin-docs 开发者文档 + master-internal-plugins E2E 单测。触发词：mastergo 插件开发、插件 API、plugin api update、更新插件类型、更新插件文档、补充插件单测、同步插件 API、插件 API 变更、devmode 代码生成、mg.createFrame、flexMode 自动布局；插件审核、审核插件、处理插件审核、plugin audit、运行线上插件验证、插件合规审查。
-version: 0.9.1
+version: 0.9.2
 ---
 
 # MasterGo 插件开发与 API 维护
@@ -1027,19 +1027,31 @@ frameA.reactions = [{
 
 **已知缺口**（要让插件做出与 UI 等价的原型连线，至少还缺这些；优先级从高到低）：
 
-1. **连线与交互无绑定字段**（阻塞）：引擎 `InteractionItem` / `CppReaction` 都没有 connectorId，插件建的线是「死线」——删线不删交互、删交互不删线。需引擎侧互存 id，再暴露 `connector.reaction` / `Reaction.connectorId`。
-2. **缺原子创建 API**：现需 `createConnector` + 两次 `setConnectorEndPoint` + `addPrototypeProps` 四步、四条命令、中间态会闪。建议 `mg.createConnector({ start, end, reaction })`。
-3. **reaction 无 id**：`CppReaction.id` 引擎有但未暴露（cBridge 也有 `getReactionById`），导致只能整体覆盖，无法增删改单条。
-4. **overlay（浮层）读写全丢**：`cppReationToPluginReation` 里 overlay 转换整段被注释（utils.ts ~207），`pluginReactionsToCppReactions` 也不转 → 浮层位置/遮罩/点击外部关闭在插件侧既读不到也写不了。
-5. **`reactions` 没进 apiConfig**：无 schema 校验、无 `disabledWhenReadOnly`，只读/DevMode 下仍可写（其他写操作走 `pluginDecorator(_, true)`）。
-6. 缺 `startNode` / `endNode` 直接引用（现在只有 `endpointNodeId`，要再 `getNodeById`）；缺 `connector.detach()`；`Navigation` 插件侧缺 `'SWAP_OVERLAY'`；页面级 flow/流程数据（`getCurrentPageFlows` / `getLayerPrototype`）未暴露给插件。
+> 以下结论 2026-09-23 逐条回读源码复核过，括号内为源码位置（master-web）。**其中第 5、4 条是对早先判断的修正，别照旧记忆用。**
+
+1. **连线与交互无绑定字段**（阻塞，且是唯一需要引擎改的一条）：`InteractionItem` 没有 connectorId（`packages/cBridge/src/pageReactions.ts:17-29`，mg-bridge `index.d.ts:2588`），全仓 grep `connectorId` 在 cBridge 零命中。插件建的线是「死线」——删线不删交互、删交互不删线，与 UI 拉出的线不等价。
+2. **缺原子创建 API**：现在要 `createConnector()` → `connectorStart=` → `connectorEnd=` → `addPrototypeProps` + `modifyPrototypeProps`，四条命令、中间态会闪，顺序写错出半成品。建议 `mg.createConnector({ start, end, reaction })` 一次落库。
+3. **reaction 无 id，只能整体覆盖**：引擎有 id——`removePrototypeProps` 本来就是按 ids 删（`bridge/index.ts:1349`），UI 自己也是 `deleteItems(values.map(d => d.id))` → `SetFrameInteraction{name:Reaction, type:Delete, value:{ids}}`（`manager/masterCommand/model/baseNode/reactions.ts:8-16`），**说明引擎已支持按 id 删，加 `removeReaction(id)` 不需要引擎配合**。但 `getReactions()` 出去的 `cppReationToPluginReation` 丢掉了 id（`runtime/utils.ts:202` 新建空对象后只填 trigger/action），回写时 `cppReation.index = index + ''` 用**数组下标**当代替（`utils.ts:293`），所以只能整体「先全删再重建」。→ 暴露 id + `addReaction()` / `updateReaction(id, patch)` / `removeReaction(id)`。
+4. **overlay 不在 interaction 上，在设计上就该挂节点**（修正）：`InteractionItem` 里没有 overlay；`overlay` 是 `PageReactionData` 的字段（`pageReactions.ts:45-50`），而 `PageReactionData` 是**每个图层一份**（`LayerPrototypeById = PageReactionItem = {data: PageReactionData}`，`layerPrototypeById.ts:5`）。所以 `utils.ts:207-212` 那段被注释的 overlay 转换，即使放开读到的也是 `undefined`——它读的是 interaction 上的 overlay，属于写错位置的死代码。正确形态是**节点级**属性（Figma 同款）：`frame.overlayPositionType` / `overlayBackgroundType` / `overlayBackgroundInteraction`，枚举引擎都有（`OverlayPositionType` 含 P_OPT_NONE/CENTER/TOP_LEFT…/MANUAL、`OverlayBackgroundInteractionType` = NONE / CLOSE_ON_CLICK_OUTSIDE，mg-bridge `index.d.ts:630-644`）。旁证：`stores/prototypeStore/index.ts:29-33` 注释就写着「该字段仅 frame 存在」，且 `setPrototypeData` 根本没读 overlay —— 前端这一路本身也是断的。
+5. **`reactions` 未登记 apiConfig，但只读门禁是有的**（修正）：`reactions` 确实不在 `apiConfig/` 里（`setterSchema` 缺失 = 类型不校验，脏值会一路进引擎）；但只读/DevMode 拦截**不会漏**——`setupSetterAndGetterDecorator` 对未登记 prop 默认给 `{ name, disabledWhenReadOnly: true }`（`runtime/utils.ts:541`），没 schema 只是 `validateSetterSchema` 直接放行。所以真实缺口只是「补 setterSchema」，不要再写成「只读下仍可写」。
+6. **引擎已支持但插件未暴露的一批能力**（都不用改引擎，纯插件层加 API）：
+   - 连线文字位置：`LayerProperties.connectorTextMidpoint: {offset, section}` + `ConnectorTextMidpoint { MIDDLE_TO_START = 0, MIDDLE_TO_END = 1 }`（mg-bridge `index.d.ts:1892`、`450`）。
+   - 端点吸附只有 4 个 magnet（`ConnectorMagnet { TOP=0, RIGHT=1, BOTTOM=2, LEFT=3 }`，mg-bridge `441`），无「自动/中心」，吸附后也不能给相对偏移。
+   - 缺 `connector.startNode` / `endNode` 直接引用（只有 `endpointNodeId`，要自己再 `getNodeById`）；`attachedConnectors` 只有 getter，缺 `connector.detach()`。
+   - `Navigation` 插件侧缺 `'SWAP_OVERLAY'`（引擎 `NavigationType` = NAVIGATE 0 / SWAP 1 / SCROLL_TO 2 / CHANGE_TO 3 / OVERLAY 16 / SWAP_OVERLAY 32，mg-bridge `666-674`；插件 `typesForPlugin.ts:607` 只列了 5 个）。
+   - flow（起点/流程图）一整套命令都有但没给插件：`addFlow` / `updateFlow` / `deleteFlow` / `sortFlow`（`manager/masterCommand/MasterGo.ts:494-561`）、`setCurrentReactions` / `clearReactions` / `resetInstanceReactions`（同文件 470/482/516），以及 cBridge 的 `getCurrentPageFlows` / `getLayerPrototype` / `getReactionById` / `getFrameReactions`（`packages/cBridge/src/prototype.ts`）。
+   - **插件没有 `findAll` / `findOne`**（`manager/plugin/` 下零命中），只能 `getNodeById` 或从页面根逐层遍历子节点 → 拿不到「本页有哪些流程/起点」，只能猜。
+7. **`reactions` 的 index 语义**：`pluginReactionsToCppReactions` 把 index 写死成数组下标（`utils.ts:293`），所以只适合「整体覆盖」；要做单条增删改必须让引擎接受真实 id 或维护稳定的 index/realindex（`InteractionItem` 里既有 `index` 也有 `realindex`）。
 
 改这条链路时要同步的源码：
 
 - `apps/web/src/manager/plugin/runtime/apiNodeConnector.ts` — 端点、strokeCap、连线文字
-- `apps/web/src/manager/plugin/runtime/apiPropsPrototype.ts` — `reactions`
-- `apps/web/src/manager/plugin/runtime/layerFactory.ts` — `ensureConnectorPrototype` / `defineAttachedConnectors`
-- `apps/web/src/manager/plugin/typesForPlugin.ts` — `ConnectorEndpoint` / `Reaction`
+- `apps/web/src/manager/plugin/runtime/apiPropsPrototype.ts` — `reactions`（整体覆盖 + 按 ids 删）
+- `apps/web/src/manager/plugin/runtime/utils.ts` — `cppReationToPluginReation` / `pluginReactionsToCppReactions`（id、overlay、index 都在这两个函数里丢）
+- `apps/web/src/manager/plugin/runtime/layerFactory.ts` — `ensureConnectorPrototype`（`353`，未调 `definePropsPrototype`）/ `defineAttachedConnectors`（`2112`）
+- `apps/web/src/manager/plugin/runtime/bridge/index.ts` — `addPrototypeProps` / `modifyPrototypeProps` / `removePrototypeProps`（`1335-1377`，同一个 `SetFrameInteraction`，type 0/1/2）
+- `apps/web/src/manager/plugin/apiConfig/scene.ts` — `attachedConnectors`（`22`，只读）；`reactions` 需新增条目
+- `apps/web/src/manager/plugin/typesForPlugin.ts` — `ConnectorEndpoint` / `Reaction` / `Navigation`（`607`）
 - `apps/web/src/manager/plugin/typesForCpp.ts` — `CppConnectorEndPoint` / `ConnectorMagnet`
 
 ## 开发指南补遗
