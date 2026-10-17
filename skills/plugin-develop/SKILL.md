@@ -1,7 +1,7 @@
 ---
 name: mastergo-plugin-develop
 description: MasterGo 插件开发与 API 维护一体化 skill。覆盖两类场景：(A) 插件开发——从零创建插件项目结构、mg 全局 API 参考、节点类型、自动布局(flexMode)、组件/样式/团队库/字体/图片、DevMode 代码生成、UI 通信、调试与最佳实践；(B) 插件 API 变更同步——当 API 新增/修改/废弃时，按顺序跨三仓库更新 plugin-typings 类型发布 + plugin-docs 开发者文档 + plugins-repo E2E 单测。触发词：mastergo 插件开发、插件 API、plugin api update、更新插件类型、更新插件文档、补充插件单测、同步插件 API、插件 API 变更、devmode 代码生成、mg.createFrame、flexMode 自动布局；插件审核、审核插件、处理插件审核、plugin audit、运行线上插件验证、插件合规审查。
-version: 0.9.1
+version: 0.9.3
 ---
 
 # MasterGo 插件开发与 API 维护
