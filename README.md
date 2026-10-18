@@ -9,7 +9,7 @@ MasterGo 官方 skills 集合仓库，存放 MasterGo 生态的各个 Claude Cod
 
 | Skill | 目录 | 说明 |
 |-------|------|------|
-| [plugin-develop](./skills/plugin-develop) | `skills/plugin-develop/` | MasterGo 插件开发与 API 维护（插件开发 + API 变更同步） |
+| [plugin-develop](./skills/plugin-develop) | `skills/plugin-develop/` | MasterGo 插件开发（公开插件 API 参考与开发指南） |
 | [dsl-to-code](./skills/dsl-to-code) | `skills/dsl-to-code/` | 设计 DSL 获取 + DSL → html/vue/react/flutter 代码转换 |
 
 ## 安装
@@ -116,9 +116,33 @@ AI 工具的 system prompt 或 skill 配置中即可。
 > 内部特有的具体用词（内部仓库名、内部人名、内部域名等）**不要写进本仓库的任何文件**，
 > 包括这条规则本身。把它们维护在一个**不提交**的本地清单里（见下），本地跑检查时引用。
 
+### 同步策略：`plugin-develop` 只允许插件 API 内容
+
+`skills/plugin-develop` 是**插件 API skill**，只承载面向插件开发者的公开 API 内容。
+从内部环境反向同步时，**非插件 API 的内容一律禁止进入本仓库**——这类内容对外部使用者
+无意义，且天然带着内部系统、流程与人员信息。
+
+**允许清单**（白名单，新增文件必须先在门禁脚本中登记）
+
+| 路径 | 内容 |
+|------|------|
+| `skills/plugin-develop/SKILL.md` | 插件开发指南 + mg API 用法 |
+| `references/api-quick-reference.md` | API 速查 |
+| `references/node-types.md` | 节点类型 |
+| `references/common-patterns.md` | 常用模式 |
+| `references/development-guide.md` | 开发指南 |
+| `assets/*.template` | main.ts / manifest.json / ui.html 模板 |
+
+**禁止清单**（出现即门禁失败）
+- 内部跨仓库发布 / 维护流程：类型包发布、文档站更新、E2E 单测等阶段步骤
+- 插件审核、上线验证工作流，以及配套脚本（审核 / 列举 / 详情 / 扫描 / 线上运行）
+- 内部环境变量、内部项目路径、内部系统名、内部人员（见上表）
+
+> 判断标准只有一条：**「外部插件开发者会不会需要这段内容」**。答「不会」就不许同步。
+
 ### 本地自查
 
-仓库自带门禁脚本，CI 会在每个 PR 上运行它：
+仓库自带门禁脚本（脱敏 + 内容边界两道），CI 会在每个 PR 上运行它：
 
 ```bash
 scripts/check-public-sanitize.sh          # 通用模式（CI 使用）
@@ -126,7 +150,9 @@ SANITIZE_EXTRA_PATTERNS=scripts/.sanitize-local.txt scripts/check-public-sanitiz
 ```
 
 `scripts/.sanitize-local.txt` 已在 `.gitignore` 中，按行写内部专有词（`#` 开头为注释），
-例如内部仓库名、内部人名、内部域名、公司邮箱等。**提交前建议本地跑一次带扩展清单的检查**。
+例如内部仓库名、内部人名、内部域名、公司邮箱等。**未设置环境变量时会自动加载该文件**；
+文件不存在时词表检查被跳过并给出醒目提示——反向同步前务必确认词表在位（正本另存于内部
+私有仓库，避免单机丢失）。
 
 若某处**故意**需要展示「不该出现的形态」作为示例（本例即如此），在该行末尾加标记
 `sanitize:allow`（推荐用 HTML 注释 `<!-- sanitize:allow -->` 承载，渲染时不可见），该行会被跳过。

@@ -1,5 +1,16 @@
 # Changelog
 
+## [2026-10-18] v1.0.8
+- **同步策略落地：`skills/plugin-develop` 只允许插件 API 内容**（非插件 API 内容禁止同步）
+  - `skills/plugin-develop` v0.9.4 → v0.10.0，移除不属于插件 API 的内容：
+    - 删除「插件 API 更新全流程」（跨仓库发布：类型包发布 → 文档站更新 → E2E 单测 → 验证提交，含内部环境变量与项目路径）
+    - 删除「插件社区审核工作流」（审核平台 SOP、审核状态流转、上线验证命令）
+    - 删除 `scripts/`（审核 / 列举 / 详情 / 扫描 / 线上运行脚本）
+    - SKILL.md 头部与 description 收窄为插件开发场景，不再声明 API 变更同步与插件审核能力
+  - `scripts/check-public-sanitize.sh` 新增**内容边界检查**：`plugin-develop` 采用**白名单**（SKILL.md / 4 个 references / 3 个 assets 模板），清单外文件或命中内部维护流程特征词（`MG_DOCS_ROOT`、`plugin-docs`、`plugins-repo`、审核工作流等）即失败
+  - `README.md` 新增《同步策略：`plugin-develop` 只允许插件 API 内容》：允许清单、禁止清单与判断标准（「外部插件开发者会不会需要这段内容」）
+  - 修正词表误报：内部仓库名改为公开包名 / 中性说法（`@mastergo/magic-mcp`、MCP server / DSL 转换链路）
+
 ## [2026-10-18] v1.0.7
 - 新增**公开仓库脱敏门禁**，防止内部信息再次同步进公开仓库：
   - `scripts/check-public-sanitize.sh`：扫描通用敏感形态（本机绝对路径、个人代码目录惯例、`文件:行号` 源码引用），命中即退出 1；支持 `SANITIZE_EXTRA_PATTERNS` 指向**不提交**的本地清单，用于叠加内部专有词（内部仓库名 / 人名 / 域名 / 公司邮箱）
@@ -53,7 +64,7 @@
   - `skills/plugin-develop/`：原插件开发 skill（场景 A 插件开发 + 场景 B API 变更同步），更名为 `mastergo-plugin-develop`，v0.8.1 → v0.9.0
   - `skills/dsl-to-code/`：新增 skill（场景 A DSL 获取 + 场景 B DSL → html/vue/react/flutter 代码转换），v0.1.0
 - **迁移**：`references/page-batch-export.md` + `scripts/mcp-batch-fetch.mjs` 从 plugin-develop 迁入 dsl-to-code（原场景 C 代码部分）
-- **调研沉淀**：盘点 mcp server / dsl transfer 链路（dsl-transfer / mcp-server / mastergo-magic-mcp），
+- **调研沉淀**：盘点 MCP server / DSL 转换链路，
   结论：用户只拿 DSL 时，纯 skill 的转换路径 = LLM 直接基于 DSL 生成代码；DSL 数据结构、硬性生成规则（token 变量化 / SVG 原样 / 防幻觉）、各框架映射要点写入 dsl-to-code/SKILL.md
 
 ## [2026-08-12] v0.8.1
