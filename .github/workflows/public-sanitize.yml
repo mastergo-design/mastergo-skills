@@ -1,0 +1,17 @@
+name: public-sanitize
+
+# 防止「只对内部维护者有效」的信息随 skill 反向同步进入公开仓库。
+# 规则与例外说明见 scripts/check-public-sanitize.sh 与 README《公开仓库内容边界》。
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: 扫描不应公开的内容
+        run: bash scripts/check-public-sanitize.sh
