@@ -1,0 +1,8 @@
+# 本地脱敏扩展清单（内部专有词，绝不提交）
+scripts/.sanitize-local.txt
+
+# 常见系统 / 编辑器产物
+.DS_Store
+Thumbs.db
+*.swp
+*~
