@@ -1,7 +1,7 @@
 ---
 name: mastergo-plugin-develop
 description: MasterGo 插件开发与 API 维护一体化 skill。覆盖两类场景：(A) 插件开发——从零创建插件项目结构、mg 全局 API 参考、节点类型、自动布局(flexMode)、组件/样式/团队库/字体/图片、DevMode 代码生成、UI 通信、调试与最佳实践；(B) 插件 API 变更同步——当 API 新增/修改/废弃时，按顺序跨三仓库更新 plugin-typings 类型发布 + mastergo-plugin-docs 开发者文档 + master-internal-plugins E2E 单测。触发词：mastergo 插件开发、插件 API、plugin api update、更新插件类型、更新插件文档、补充插件单测、同步插件 API、插件 API 变更、devmode 代码生成、mg.createFrame、flexMode 自动布局；插件审核、审核插件、处理插件审核、plugin audit、运行线上插件验证、插件合规审查。
-version: 0.9.3
+version: 0.9.4
 ---
 
 # MasterGo 插件开发与 API 维护
@@ -1020,60 +1020,27 @@ frameA.reactions = [{
 
 限制与坑：
 
-- CONNECTOR 的原型对象（`ensureConnectorPrototype`）**没有** `definePropsPrototype`，即 `connector.reactions` 不存在：读不到、写了也无效。SECTION 节点的 `reactions` 同样被注释掉未启用。
-- `createFrame` / `createComponent` / `group` / 布尔运算等 API 显式禁止传入 CONNECTOR 子节点（schema pattern `^(?!CONNECTOR).*$`）。
+- CONNECTOR 节点不承载交互：`connector.reactions` 不存在，读不到、写了也无效。SECTION 节点的 `reactions` 同样未启用。
+- `createFrame` / `createComponent` / `group` / 布尔运算等 API 显式禁止传入 CONNECTOR 子节点。
 - `mg.createConnector()` 不校验参数，创建后落在当前页面，端点默认是空的；只给两端 `position` 是自由连线，要吸附必须给 `endpointNodeId` + `magnet`。
 - `reactions` 的 setter 是**整体覆盖**：先删除该节点已有全部交互再重建，不是增量追加。
 
 **已知缺口**（要让插件做出与 UI 等价的原型连线，至少还缺这些；优先级从高到低）：
 
-> 以下结论 2026-09-23 逐条回读源码复核过，括号内为源码位置（master-web）。**其中第 5、4 条是对早先判断的修正，别照旧记忆用。**
+1. **连线与交互无绑定字段**（阻塞，且是唯一需要引擎侧改造的一条）：连线（connector）与原型交互（reaction）之间没有互相引用的 id，插件建的线是「死线」——删线不删交互、删交互不删线，与 UI 拉出的线不等价。需引擎侧互存 id，再暴露 `connector.reaction` / `Reaction.connectorId`。
+2. **缺原子创建 API**：现在要 `createConnector()` → `connectorStart=` → `connectorEnd=` → 写入交互属性，四步、中间态会闪，顺序写错出半成品。建议 `mg.createConnector({ start, end, reaction })` 一次落库。
+3. **reaction 无 id，只能整体覆盖**：交互项在引擎侧有 id 但未暴露给插件 API，插件读写 reactions 时只能以数组下标定位，因此只能「先全删再重建」整体覆盖，无法对单条交互做增删改。→ 后续应暴露 id，并提供 `addReaction()` / `updateReaction(id, patch)` / `removeReaction(id)`。
+4. **overlay（浮层）暂不可通过插件 API 读写**：浮层位置 / 遮罩 / 点击外部关闭等属性不在交互数据上，而是**节点级**属性（与 Figma 一致，挂在 frame 上：`overlayPositionType` / `overlayBackgroundType` / `overlayBackgroundInteraction`）。插件 API 尚未暴露这三个节点属性，建议按节点级属性补齐，而不是挂在 reaction 上。
+5. **`reactions` 未做类型校验**：`reactions` 的 setter 没有登记 schema 校验（写入脏值不会在赋值时报错）；只读 / DevMode 门禁本身是生效的。
+6. **引擎已支持但插件 API 未暴露的一批能力**（补 API 不需要引擎配合）：
+   - 连线文字位置（`connectorTextMidpoint`：可设在连线中段偏起点 / 偏终点）。
+   - 端点吸附只有 4 个 magnet（上 / 右 / 下 / 左），无「自动 / 中心」，吸附后不能给相对偏移。
+   - 缺 `connector.startNode` / `endNode` 直接引用（现在只有 `endpointNodeId`，要再 `getNodeById`）；`attachedConnectors` 只有 getter，缺 `connector.detach()`。
+   - `Navigation` 枚举缺 `'SWAP_OVERLAY'`。
+   - 页面级 flow / 流程数据（起点的增删改排序与查询）未暴露给插件；插件也没有 `findAll` / `findOne`，拿不到「本页有哪些流程 / 起点」。
+7. **`reactions` 只适合整体覆盖**：回写时交互项以数组下标定位，所以 setter 只适合整体覆盖；要做单条增删改需要引擎接受真实 id 或维护稳定的 index。
 
-1. **连线与交互无绑定字段**（阻塞，且是唯一需要引擎改的一条）：`InteractionItem` 没有 connectorId（`packages/cBridge/src/pageReactions.ts:17-29`，mg-bridge `index.d.ts:2588`），全仓 grep `connectorId` 在 cBridge 零命中。插件建的线是「死线」——删线不删交互、删交互不删线，与 UI 拉出的线不等价。
-2. **缺原子创建 API**：现在要 `createConnector()` → `connectorStart=` → `connectorEnd=` → `addPrototypeProps` + `modifyPrototypeProps`，四条命令、中间态会闪，顺序写错出半成品。建议 `mg.createConnector({ start, end, reaction })` 一次落库。
-3. **reaction 无 id，只能整体覆盖**：引擎有 id——`removePrototypeProps` 本来就是按 ids 删（`bridge/index.ts:1349`），UI 自己也是 `deleteItems(values.map(d => d.id))` → `SetFrameInteraction{name:Reaction, type:Delete, value:{ids}}`（`manager/masterCommand/model/baseNode/reactions.ts:8-16`），**说明引擎已支持按 id 删，加 `removeReaction(id)` 不需要引擎配合**。但 `getReactions()` 出去的 `cppReationToPluginReation` 丢掉了 id（`runtime/utils.ts:202` 新建空对象后只填 trigger/action），回写时 `cppReation.index = index + ''` 用**数组下标**当代替（`utils.ts:293`），所以只能整体「先全删再重建」。→ 暴露 id + `addReaction()` / `updateReaction(id, patch)` / `removeReaction(id)`。
-4. **overlay 不在 interaction 上，在设计上就该挂节点**（修正）：`InteractionItem` 里没有 overlay；`overlay` 是 `PageReactionData` 的字段（`pageReactions.ts:45-50`），而 `PageReactionData` 是**每个图层一份**（`LayerPrototypeById = PageReactionItem = {data: PageReactionData}`，`layerPrototypeById.ts:5`）。所以 `utils.ts:207-212` 那段被注释的 overlay 转换，即使放开读到的也是 `undefined`——它读的是 interaction 上的 overlay，属于写错位置的死代码。正确形态是**节点级**属性（Figma 同款）：`frame.overlayPositionType` / `overlayBackgroundType` / `overlayBackgroundInteraction`，枚举引擎都有（`OverlayPositionType` 含 P_OPT_NONE/CENTER/TOP_LEFT…/MANUAL、`OverlayBackgroundInteractionType` = NONE / CLOSE_ON_CLICK_OUTSIDE，mg-bridge `index.d.ts:630-644`）。旁证：`stores/prototypeStore/index.ts:29-33` 注释就写着「该字段仅 frame 存在」，且 `setPrototypeData` 根本没读 overlay —— 前端这一路本身也是断的。
-5. **`reactions` 未登记 apiConfig，但只读门禁是有的**（修正）：`reactions` 确实不在 `apiConfig/` 里（`setterSchema` 缺失 = 类型不校验，脏值会一路进引擎）；但只读/DevMode 拦截**不会漏**——`setupSetterAndGetterDecorator` 对未登记 prop 默认给 `{ name, disabledWhenReadOnly: true }`（`runtime/utils.ts:541`），没 schema 只是 `validateSetterSchema` 直接放行。所以真实缺口只是「补 setterSchema」，不要再写成「只读下仍可写」。
-6. **引擎已支持但插件未暴露的一批能力**（都不用改引擎，纯插件层加 API）：
-   - 连线文字位置：`LayerProperties.connectorTextMidpoint: {offset, section}` + `ConnectorTextMidpoint { MIDDLE_TO_START = 0, MIDDLE_TO_END = 1 }`（mg-bridge `index.d.ts:1892`、`450`）。
-   - 端点吸附只有 4 个 magnet（`ConnectorMagnet { TOP=0, RIGHT=1, BOTTOM=2, LEFT=3 }`，mg-bridge `441`），无「自动/中心」，吸附后也不能给相对偏移。
-   - 缺 `connector.startNode` / `endNode` 直接引用（只有 `endpointNodeId`，要自己再 `getNodeById`）；`attachedConnectors` 只有 getter，缺 `connector.detach()`。
-   - `Navigation` 插件侧缺 `'SWAP_OVERLAY'`（引擎 `NavigationType` = NAVIGATE 0 / SWAP 1 / SCROLL_TO 2 / CHANGE_TO 3 / OVERLAY 16 / SWAP_OVERLAY 32，mg-bridge `666-674`；插件 `typesForPlugin.ts:607` 只列了 5 个）。
-   - flow（起点/流程图）一整套命令都有但没给插件：`addFlow` / `updateFlow` / `deleteFlow` / `sortFlow`（`manager/masterCommand/MasterGo.ts:494-561`）、`setCurrentReactions` / `clearReactions` / `resetInstanceReactions`（同文件 470/482/516），以及 cBridge 的 `getCurrentPageFlows` / `getLayerPrototype` / `getReactionById` / `getFrameReactions`（`packages/cBridge/src/prototype.ts`）。
-   - **插件没有 `findAll` / `findOne`**（`manager/plugin/` 下零命中），只能 `getNodeById` 或从页面根逐层遍历子节点 → 拿不到「本页有哪些流程/起点」，只能猜。
-7. **`reactions` 的 index 语义**：`pluginReactionsToCppReactions` 把 index 写死成数组下标（`utils.ts:293`），所以只适合「整体覆盖」；要做单条增删改必须让引擎接受真实 id 或维护稳定的 index/realindex（`InteractionItem` 里既有 `index` 也有 `realindex`）。
-
-**命令契约（复核后确认，写实现时照这个来）**
-
-- 底层是**一条命令** `MasterCommand.SetFrameInteraction`，`ExtPropsType` 全表在 `core/master-instance/enum.ts:256`：`Add=0 / Update=1 / Delete=2 / UpdateAttribute=3 / Sort=4 / Append=5 / … / DeleteAllInteractions=19`。插件 bridge 只用了 0/1/2，`Sort(4)` 和 `DeleteAllInteractions(19)` 没用上。
-- **引擎按 `index` 或 `ids` 双通道定位 interaction**：UI 面板是 `addInteraction(eventType)` → `{name:'prototype', type:Add, value:{trigger}}`、`modifyInteraction(value, index)` → `{…, type:Update, value:{…value, index}}`、`deleteInteraction(index)` → `{…, type:Delete, value:{index}}`（`manager/masterCommand/model/layers.ts:179-211`）；而 `Reactions.deleteItems(ids)` → `{name:Reaction, type:Delete, value:{ids}}`（`baseNode/reactions.ts:8-16`）。所以**做单条增删改不需要新命令，也不需要新 id 体系，只要透传引擎真实 `index`**（`InteractionItem` 同时有 `index` 和 `realindex`）。
-- **overlay 是另一条写路径**：`setOverlayPosition` / `toggleClickOverlayOuterCloseOverlay` / `toggleAddMaskBehindOverlay` / `setMaskColor` 同样发 `SetFrameInteraction`，但 payload 是**裸的** `{overlayPositionType}` / `{backgroundInteraction}` / `{backgroundType}` / `{color}` —— 不带 `name:'prototype'`、不带 `data.value` 包装（`manager/masterCommand/model/baseNode/index.ts:1133-1158`）。别照抄 reactions 那套包装。
-- **web 侧没有创建连线的命令**：UI 里画线是引擎（C++）行为，web 只读 —— `cBridge.getSelectConnectorLayerIds` / `getSelectConnectorTextLayerIds`、`getLayerProperties(['connectorStart','connectorEnd'])`（`views/prototyping/components/hooks/`）；`connectorEndPoint` 这条命令**只在插件 bridge 出现**（`bridge/index.ts:1942`）。即插件是 web 侧唯一的连线创建者，原子创建 API 的必要性比一般属性 API 更高。
-
-**实施清单（要做的事，按层拆；P0 未完成前插件做不出与 UI 等价的连线）**
-
-1. **引擎**（唯一必须引擎配合的一条）：interaction ↔ connector 互存 id。其余全部落在 web 插件层 + 类型包 + 文档。
-2. **reaction 的增删改**：`apiPropsPrototype.ts` 加 `addReaction / updateReaction(index, patch) / removeReaction(index)`；`utils.ts` 两个转换函数透传引擎真实 `id`/`index`（现在的数组下标即根因）。
-3. **overlay 按节点级补 API**，复用上面那条裸 payload 写路径；读走 `LayerPrototypeById(id).data.overlay`。
-4. **连线便利属性**：`connector.startNode / endNode`、`connector.detach()`、`connector.connectorTextMidpoint`、`Navigation` 加 `'SWAP_OVERLAY'`。
-5. **原子创建**：`mg.createConnector({start, end, reaction})`，把现在的四条命令合并（`createConnector()` → `connectorStart=` → `connectorEnd=` → `addPrototypeProps` + `modifyPrototypeProps`）。
-6. **flow 一整套**暴露给插件（`addFlow/updateFlow/deleteFlow/sortFlow`、`setCurrentReactions/clearReactions/resetInstanceReactions`，`MasterGo.ts:470-561`）+ 查询侧（`getCurrentPageFlows`/`getLayerPrototype`/`getReactionById`/`getFrameReactions`），并配套 `findAll`/`findOne`（现在零命中，只能从页面根逐层遍历）。
-7. **apiConfig 注册**：`reactions` 要补 `setterSchema`；`connectorStart` / `connectorEnd` / `connectorStartStrokeCap` / `connectorEndStrokeCap` / `cornerRadius` **这五个目前也都没登记**（同样只靠默认兜底，无 schema 校验）；overlay 三个字段新增条目。`attachedConnectors` 已有。
-8. **CONNECTOR 是否承载交互**要定夺：要么在 `ensureConnectorPrototype` 里补 `definePropsPrototype`，要么在 typings 明确写「连线不承载交互」。
-9. **`~/code/mg/plugin-typings`（公共契约，独立仓库、要发版）**：`ReactionMixin.reactions` 现为 `ReadonlyArray<Reaction>`（只读）而运行时已有 setter；`Reaction` 缺 `id`/`overlay`（**整个 typings 没有 Overlay 类型**）；`createConnector(): ConnectorNode` 无参数；`ConnectorNode` 缺 `reactions/startNode/endNode/detach/connectorTextMidpoint`；`navigation` 枚举缺 `SWAP_OVERLAY`。
-10. **typings 与运行时不一致（现存 bug）**：`SectionNode extends DefaultContainerMixin`（含 `ReactionMixin`）→ typings 声明 section 有 `reactions`，但运行时 `layerFactory.ts:2213` 把 `definePropsPrototype` 注释掉了。要么放开、要么从 typings 摘掉，别留着。
-11. **文档 / E2E**：`mastergo-plugin-docs` 补 API 说明；`master-internal-plugins` 加连线 + 交互 + 浮层 + 级联删除的 E2E（按第 19 节四阶段同步）。
-
-改这条链路时要同步的源码：
-
-- `apps/web/src/manager/plugin/runtime/apiNodeConnector.ts` — 端点、strokeCap、连线文字
-- `apps/web/src/manager/plugin/runtime/apiPropsPrototype.ts` — `reactions`（整体覆盖 + 按 ids 删）
-- `apps/web/src/manager/plugin/runtime/utils.ts` — `cppReationToPluginReation` / `pluginReactionsToCppReactions`（id、overlay、index 都在这两个函数里丢）
-- `apps/web/src/manager/plugin/runtime/layerFactory.ts` — `ensureConnectorPrototype`（`353`，未调 `definePropsPrototype`）/ `defineAttachedConnectors`（`2112`）
-- `apps/web/src/manager/plugin/runtime/bridge/index.ts` — `addPrototypeProps` / `modifyPrototypeProps` / `removePrototypeProps`（`1335-1377`，同一个 `SetFrameInteraction`，type 0/1/2）
-- `apps/web/src/manager/plugin/apiConfig/scene.ts` — `attachedConnectors`（`22`，只读）；`reactions` 需新增条目
-- `apps/web/src/manager/plugin/typesForPlugin.ts` — `ConnectorEndpoint` / `Reaction` / `Navigation`（`607`）
-- `apps/web/src/manager/plugin/typesForCpp.ts` — `CppConnectorEndPoint` / `ConnectorMagnet`
+> 上述缺口的内部实现定位（源码位置、引擎命令契约、内部改造待办）维护在内部 skill `mastergo-plugin`，公开仓库只保留面向插件开发者的结论。
 
 ## 开发指南补遗
 
@@ -1251,7 +1218,7 @@ yarn add @mastergo/plugin-typings
 本技能通过环境变量定位项目路径，**使用前必须设置** `MG_DOCS_ROOT`：
 
 ```bash
-export MG_DOCS_ROOT=~/code/mg/mg-docs
+export MG_DOCS_ROOT=~/mg-docs
 ```
 
 如需为单个项目覆盖路径，可额外设置：
@@ -1502,16 +1469,16 @@ cd $MG_DOCS_ROOT/master-internal-plugins && pnpm serve
 
 | 环境变量 | 默认值 | 说明 |
 |----------|--------|------|
-| `MASTERGO_PLUGIN_TYPINGS_PATH` | `~/code/mg/mg-docs/plugin-typings` | 插件 API 类型项目 |
-| `MASTERGO_PLUGIN_DOCS_PATH` | `~/code/mg/mg-docs/mastergo-plugin-docs` | 插件开发者文档项目 |
-| `MASTERGO_INTERNAL_PLUGINS_PATH` | `~/code/mg/mg-docs/master-internal-plugins` | 插件单测项目 |
+| `MASTERGO_PLUGIN_TYPINGS_PATH` | `~/mg-docs/plugin-typings` | 插件 API 类型项目 |
+| `MASTERGO_PLUGIN_DOCS_PATH` | `~/mg-docs/mastergo-plugin-docs` | 插件开发者文档项目 |
+| `MASTERGO_INTERNAL_PLUGINS_PATH` | `~/mg-docs/master-internal-plugins` | 插件单测项目 |
 
 在执行脚本时使用以下方式读取路径：
 
 ```bash
-PLUGIN_TYPINGS="${MASTERGO_PLUGIN_TYPINGS_PATH:-~/code/mg/mg-docs/plugin-typings}"
-PLUGIN_DOCS="${MASTERGO_PLUGIN_DOCS_PATH:-~/code/mg/mg-docs/mastergo-plugin-docs}"
-INTERNAL_PLUGINS="${MASTERGO_INTERNAL_PLUGINS_PATH:-~/code/mg/mg-docs/master-internal-plugins}"
+PLUGIN_TYPINGS="${MASTERGO_PLUGIN_TYPINGS_PATH:-~/mg-docs/plugin-typings}"
+PLUGIN_DOCS="${MASTERGO_PLUGIN_DOCS_PATH:-~/mg-docs/mastergo-plugin-docs}"
+INTERNAL_PLUGINS="${MASTERGO_INTERNAL_PLUGINS_PATH:-~/mg-docs/master-internal-plugins}"
 ```
 
 ## 工作流程
@@ -1531,17 +1498,17 @@ done
 
 ### 1. 更新插件 API 类型
 
-项目地址：`$MASTERGO_PLUGIN_TYPINGS_PATH`（默认 `~/code/mg/mg-docs/plugin-typings`）
+项目地址：`$MASTERGO_PLUGIN_TYPINGS_PATH`（默认 `~/mg-docs/plugin-typings`）
 
 操作：
 - 类型定义集中在根目录的 `plugin.d.ts`（不在 `src/` 下）
 - 类型变更涉及新增/修改/删除接口、类型、枚举、常量等
-- 确保类型定义与 MasterGo 插件运行时（master-web `apps/web/src/manager/plugin/typesForPlugin.ts`、`typesForCpp.ts`）保持一致
+- 确保类型定义与 MasterGo 插件运行时的实际行为保持一致（宿主实现细节见内部仓库）
 - 可选字段统一加 `?`，并在注释中标注「老库/旧版本可能缺省」
 
 ### 2. 更新插件开发者文档
 
-项目地址：`$MASTERGO_PLUGIN_DOCS_PATH`（默认 `~/code/mg/mg-docs/mastergo-plugin-docs`）
+项目地址：`$MASTERGO_PLUGIN_DOCS_PATH`（默认 `~/mg-docs/mastergo-plugin-docs`）
 
 操作：
 - 同步更新文档中涉及 API 变更的部分
@@ -1554,7 +1521,7 @@ done
 
 ### 3. 更新插件单测
 
-项目地址：`$MASTERGO_INTERNAL_PLUGINS_PATH`（默认 `~/code/mg/mg-docs/master-internal-plugins`）
+项目地址：`$MASTERGO_INTERNAL_PLUGINS_PATH`（默认 `~/mg-docs/master-internal-plugins`）
 
 操作：
 - 更新单测用例以适配新的 API
@@ -1566,7 +1533,7 @@ done
 
 - 三个项目分别提交到各自的新分支并推送
 - plugin-typings 托管在 **GitHub**（`mastergo-design/plugin-typings`），用 `gh pr create` 创建 PR 到 `master`
-- mastergo-plugin-docs / master-internal-plugins 托管在 **GitLab**（`master/frontend/*`），用 GitLab API 创建 MR 到 `master`
+- mastergo-plugin-docs / master-internal-plugins 托管在**内部 GitLab**（组路径见内部文档），用 GitLab API 创建 MR 到 `master`
 - MR 描述中互相引用关联 MR/PR 链接
 
 ## 关键类型/文档对照表
@@ -1583,7 +1550,7 @@ done
 
 ## 案例：getTeamLibraryAsync 暴露 properties/textNodeNames/values
 
-2026/07 的典型同步案例。master-web 为 `getTeamLibraryAsync` 增强返回结构后，三处同步更新：
+2026/07 的典型同步案例。宿主侧为 `getTeamLibraryAsync` 增强返回结构后，三处同步更新：
 
 | 改动项 | plugin-typings（plugin.d.ts） | mastergo-plugin-docs |
 |---|---|---|
@@ -1594,16 +1561,16 @@ done
 | changelog | — | `updates/index.md` 顶部新增版本小节 |
 
 关键约定：
-- `values` 中 `value` 字段类型用 `any`（与 master-web 运行时一致），文档中以表格形式说明各样式分类的 value 形态
+- `values` 中 `value` 字段类型用 `any`（与宿主运行时一致），文档中以表格形式说明各样式分类的 value 形态
 - 老库可能缺省的字段在类型上加 `?`，文档中显式注明「老库可能缺省」
 - 变量引用项或解析异常时 `value` 为 `undefined`，文档中需明确说明
 
 ## 测试命令
 
-**前提：所有命令必须先进入 `$MASTERGO_INTERNAL_PLUGINS_PATH` 目录执行**（默认 `~/code/mg/mg-docs/master-internal-plugins`）：
+**前提：所有命令必须先进入 `$MASTERGO_INTERNAL_PLUGINS_PATH` 目录执行**（默认 `~/mg-docs/master-internal-plugins`）：
 
 ```bash
-cd "${MASTERGO_INTERNAL_PLUGINS_PATH:-~/code/mg/mg-docs/master-internal-plugins}"
+cd "${MASTERGO_INTERNAL_PLUGINS_PATH:-~/mg-docs/master-internal-plugins}"
 ```
 
 启动单测服务需要执行**两个命令**（各占一个终端/后台）：
@@ -1637,12 +1604,12 @@ cd "${MASTERGO_INTERNAL_PLUGINS_PATH:-~/code/mg/mg-docs/master-internal-plugins}
 
 ## Overview
 
-参考 SOP：`插件审核流程`（飞书 wiki `ROtJwtQyNiPwipkTijccLHdgnaf`）。
+参考 SOP：`插件审核流程`（内部文档，权限见审核平台）。
 
-- 待审核列表页面：`https://mastergo.com/admin/home/resource_center/plugin_audit`（无权限找袁博开通）
+- 待审核列表页面：`https://mastergo.com/admin/home/resource_center/plugin_audit`（无权限找插件审核管理员开通）
 - 审核原则：**优先处理合规审核通过的插件**（status=1）；插件通过的前提是**在 dev 环境运行插件，运行结果与插件描述一致**。
 - **本 skill 不自行为插件判通过/不通过**：只负责把插件的**运行验证结果**跑出来（能否运行、运行 UI、控制台错误、与描述是否一致），把结果交给审核人；审核人明确要求"通过/不通过"时才执行审核操作。
-- 特殊情况：插件有问题需要下架的，找杨鹏帮忙；程序自动合规审核用的是网易易盾。
+- 特殊情况：插件有问题需要下架的，找平台负责人协助；程序自动合规审核用的是网易易盾。
 
 ## 前置条件
 
@@ -1718,8 +1685,8 @@ node scripts/scan.js <plugin_url> [输出目录]
 
 SOP 要求：先在审核平台复制插件内容，然后到 dev 画布通过「运行线上插件」流程实际运行，**运行结果须与插件描述一致**。只有 dev 环境有"运行线上插件"入口。
 
-**流程原理**（已核对 master-web 源码，`apps/web/src/views/plugin/run-online-plugin/RunOnlinePlugin.vue` + `views/main/file/util/tool.ts` + `views/components/plugin/pluginDock.vue`）：
-顶栏插件入口 `.mas-tool-plugin` → 菜单「运行线上插件」（仅 dev 环境显示）→ 弹窗文本域 `.run-online-plugin__input` 粘贴插件 JSON → **输入框失焦**（`handleBlur` 触发 `JSON.parse` → `addInstalledPlugin`）→ 左下角/面板生成插件图标 `.plugin-item` → 点击图标 → `pluginManager.openPlugin` 开始运行。插件 JSON 即审核列表接口的行对象（含 `plugin_id/plugin_name/plugin_manifest/plugin_logo/plugin_url/editor_type` 等，**`JSON.stringify(行对象)` 与审核平台「复制插件」按钮复制的内容一致**）。
+**流程原理**（已核对宿主实现）：
+顶栏插件入口 `.mas-tool-plugin` → 菜单「运行线上插件」（仅 dev 环境显示）→ 弹窗文本域 `.run-online-plugin__input` 粘贴插件 JSON → **输入框失焦**触发解析并安装插件 → 左下角/面板生成插件图标 `.plugin-item` → 点击图标开始运行。插件 JSON 即审核列表接口的行对象（含 `plugin_id/plugin_name/plugin_manifest/plugin_logo/plugin_url/editor_type` 等，**`JSON.stringify(行对象)` 与审核平台「复制插件」按钮复制的内容一致**）。
 
 **4a. 自动运行（推荐）**
 
@@ -1828,8 +1795,8 @@ API 参考（供脚本维护用）：
 - **`Value is too large...`**：读 cookies 库时 `expires_utc` 溢出，SQL 里用 `CAST(expires_utc AS TEXT)` 避免（脚本已处理）。
 - **解密出乱码**：Chrome 加密方案是 `v10 + 16字节IV + AES-128-CBC`，解密后要再**去掉 16 字节常量前缀**才是 cookie 值（脚本已处理）。
 - **插件包不是 zip 而是 HTML/JS**：MasterGo 插件包构建后可能以单文件 HTML/JS 形式存储，直接按文本扫描即可。
-- **找不到审核页面权限**：找袁博开通 admin 插件审核权限。
-- **需要下架已发布的问题插件**：找杨鹏协助。
+- **找不到审核页面权限**：联系插件审核管理员开通 admin 插件审核权限。
+- **需要下架已发布的问题插件**：联系平台负责人协助。
 - **`--run` 报"未找到顶栏插件入口"**：当前 CDP 打开的页面不是 dev 画布 `/file/:id` 页，或页面还没加载完；确认浏览器已打开 dev.mastergo.com 的 /file 页。
 - **`--run` 报"未找到运行线上插件菜单项"**：当前不是 dev 环境（生产环境无此入口）；确认是 dev.mastergo.com。
 - **`--run` 报"失焦后未生成插件运行图标"**：粘贴的 JSON 不是审核行对象（`JSON.parse` 失败或字段缺失）；用 `--prepare` 重新生成。
