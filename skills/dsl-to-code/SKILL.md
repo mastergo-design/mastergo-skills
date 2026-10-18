@@ -261,7 +261,7 @@ type Dsl = {
   single-flight + fileId affinity 调度，暴露 getDesignSections / getDesignSvgs / getDesignTexts /
   getPageLayers / getDsl / extractSvg / getComponentLink / getMeta / applyDesign 工具；
   是场景 A 纯 token REST 端点的服务端实现。
-- **mastergo-magic-mcp**（`@mastergo/magic-mcp`）：面向用户的 MCP 客户端（npx 一键启动），
+- **`@mastergo/magic-mcp`**：面向用户的 MCP 客户端（npx 一键启动），
   将上述服务端能力封装为 MCP 工具；`getDsl` 返回 `{ dsl, componentDocumentLinks, rules }`，
   `rules` 即本 skill 硬性规则的来源。
 
