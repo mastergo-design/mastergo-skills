@@ -1,7 +1,7 @@
 ---
 name: mastergo-plugin-develop
 description: MasterGo 插件开发与 API 维护一体化 skill。覆盖两类场景：(A) 插件开发——从零创建插件项目结构、mg 全局 API 参考、节点类型、自动布局(flexMode)、组件/样式/团队库/字体/图片、DevMode 代码生成、UI 通信、调试与最佳实践；(B) 插件 API 变更同步——当 API 新增/修改/废弃时，按顺序跨三仓库更新 plugin-typings 类型发布 + plugin-docs 开发者文档 + plugins-repo E2E 单测。触发词：mastergo 插件开发、插件 API、plugin api update、更新插件类型、更新插件文档、补充插件单测、同步插件 API、插件 API 变更、devmode 代码生成、mg.createFrame、flexMode 自动布局；插件审核、审核插件、处理插件审核、plugin audit、运行线上插件验证、插件合规审查。
-version: 0.9.3
+version: 0.9.4
 ---
 
 # MasterGo 插件开发与 API 维护
@@ -1020,8 +1020,8 @@ frameA.reactions = [{
 
 限制与坑：
 
-- CONNECTOR 的原型对象（`ensureConnectorPrototype`）**没有** `definePropsPrototype`，即 `connector.reactions` 不存在：读不到、写了也无效。SECTION 节点的 `reactions` 同样被注释掉未启用。
-- `createFrame` / `createComponent` / `group` / 布尔运算等 API 显式禁止传入 CONNECTOR 子节点（schema pattern `^(?!CONNECTOR).*$`）。
+- CONNECTOR 节点不承载交互：`connector.reactions` 不存在，读不到、写了也无效。SECTION 节点的 `reactions` 同样未启用。
+- `createFrame` / `createComponent` / `group` / 布尔运算等 API 显式禁止传入 CONNECTOR 子节点。
 - `mg.createConnector()` 不校验参数，创建后落在当前页面，端点默认是空的；只给两端 `position` 是自由连线，要吸附必须给 `endpointNodeId` + `magnet`。
 - `reactions` 的 setter 是**整体覆盖**：先删除该节点已有全部交互再重建，不是增量追加。
 ## 开发指南补遗
@@ -1485,7 +1485,7 @@ done
 操作：
 - 类型定义集中在根目录的 `plugin.d.ts`（不在 `src/` 下）
 - 类型变更涉及新增/修改/删除接口、类型、枚举、常量等
-- 确保类型定义与 MasterGo 插件运行时（web 端 `apps/web/src/manager/plugin/typesForPlugin.ts`、`typesForCpp.ts`）保持一致
+- 确保类型定义与 MasterGo 插件运行时的实际行为保持一致（宿主实现细节见内部仓库）
 - 可选字段统一加 `?`，并在注释中标注「老库/旧版本可能缺省」
 
 ### 2. 更新插件开发者文档
@@ -1515,7 +1515,7 @@ done
 
 - 三个项目分别提交到各自的新分支并推送
 - plugin-typings 托管在 **GitHub**（`mastergo-design/plugin-typings`），用 `gh pr create` 创建 PR 到 `master`
-- plugin-docs / plugins-repo 托管在 **GitLab**（`master/frontend/*`），用 GitLab API 创建 MR 到 `master`
+- plugin-docs / plugins-repo 托管在**内部 GitLab**（组路径见内部文档），用 GitLab API 创建 MR 到 `master`
 - MR 描述中互相引用关联 MR/PR 链接
 
 ## 关键类型/文档对照表
@@ -1532,7 +1532,7 @@ done
 
 ## 案例：getTeamLibraryAsync 暴露 properties/textNodeNames/values
 
-2026/07 的典型同步案例。web 端 为 `getTeamLibraryAsync` 增强返回结构后，三处同步更新：
+2026/07 的典型同步案例。宿主侧为 `getTeamLibraryAsync` 增强返回结构后，三处同步更新：
 
 | 改动项 | plugin-typings（plugin.d.ts） | plugin-docs |
 |---|---|---|
@@ -1543,7 +1543,7 @@ done
 | changelog | — | `updates/index.md` 顶部新增版本小节 |
 
 关键约定：
-- `values` 中 `value` 字段类型用 `any`（与 web 端 运行时一致），文档中以表格形式说明各样式分类的 value 形态
+- `values` 中 `value` 字段类型用 `any`（与宿主运行时一致），文档中以表格形式说明各样式分类的 value 形态
 - 老库可能缺省的字段在类型上加 `?`，文档中显式注明「老库可能缺省」
 - 变量引用项或解析异常时 `value` 为 `undefined`，文档中需明确说明
 
@@ -1586,12 +1586,12 @@ cd "${PLUGINS_PATH:-~/docs/plugins-repo}"
 
 ## Overview
 
-参考 SOP：`插件审核流程`（飞书 wiki `ROtJwtQyNiPwipkTijccLHdgnaf`）。
+参考 SOP：`插件审核流程`（内部文档，权限见审核平台）。
 
-- 待审核列表页面：`https://mastergo.com/admin/home/resource_center/plugin_audit`（无权限找袁博开通）
+- 待审核列表页面：`https://mastergo.com/admin/home/resource_center/plugin_audit`（无权限找插件审核管理员开通）
 - 审核原则：**优先处理合规审核通过的插件**（status=1）；插件通过的前提是**在 dev 环境运行插件，运行结果与插件描述一致**。
 - **本 skill 不自行为插件判通过/不通过**：只负责把插件的**运行验证结果**跑出来（能否运行、运行 UI、控制台错误、与描述是否一致），把结果交给审核人；审核人明确要求"通过/不通过"时才执行审核操作。
-- 特殊情况：插件有问题需要下架的，找杨鹏帮忙；程序自动合规审核用的是网易易盾。
+- 特殊情况：插件有问题需要下架的，找平台负责人协助；程序自动合规审核用的是网易易盾。
 
 ## 前置条件
 
@@ -1667,8 +1667,8 @@ node scripts/scan.js <plugin_url> [输出目录]
 
 SOP 要求：先在审核平台复制插件内容，然后到 dev 画布通过「运行线上插件」流程实际运行，**运行结果须与插件描述一致**。只有 dev 环境有"运行线上插件"入口。
 
-**流程原理**（已核对 web 端 源码，`apps/web/src/views/plugin/run-online-plugin/RunOnlinePlugin.vue` + `views/main/file/util/tool.ts` + `views/components/plugin/pluginDock.vue`）：
-顶栏插件入口 `.mas-tool-plugin` → 菜单「运行线上插件」（仅 dev 环境显示）→ 弹窗文本域 `.run-online-plugin__input` 粘贴插件 JSON → **输入框失焦**（`handleBlur` 触发 `JSON.parse` → `addInstalledPlugin`）→ 左下角/面板生成插件图标 `.plugin-item` → 点击图标 → `pluginManager.openPlugin` 开始运行。插件 JSON 即审核列表接口的行对象（含 `plugin_id/plugin_name/plugin_manifest/plugin_logo/plugin_url/editor_type` 等，**`JSON.stringify(行对象)` 与审核平台「复制插件」按钮复制的内容一致**）。
+**流程原理**（已核对宿主实现）：
+顶栏插件入口 `.mas-tool-plugin` → 菜单「运行线上插件」（仅 dev 环境显示）→ 弹窗文本域 `.run-online-plugin__input` 粘贴插件 JSON → **输入框失焦**触发解析并安装插件 → 左下角/面板生成插件图标 `.plugin-item` → 点击图标开始运行。插件 JSON 即审核列表接口的行对象（含 `plugin_id/plugin_name/plugin_manifest/plugin_logo/plugin_url/editor_type` 等，**`JSON.stringify(行对象)` 与审核平台「复制插件」按钮复制的内容一致**）。
 
 **4a. 自动运行（推荐）**
 
@@ -1777,8 +1777,8 @@ API 参考（供脚本维护用）：
 - **`Value is too large...`**：读 cookies 库时 `expires_utc` 溢出，SQL 里用 `CAST(expires_utc AS TEXT)` 避免（脚本已处理）。
 - **解密出乱码**：Chrome 加密方案是 `v10 + 16字节IV + AES-128-CBC`，解密后要再**去掉 16 字节常量前缀**才是 cookie 值（脚本已处理）。
 - **插件包不是 zip 而是 HTML/JS**：MasterGo 插件包构建后可能以单文件 HTML/JS 形式存储，直接按文本扫描即可。
-- **找不到审核页面权限**：找袁博开通 admin 插件审核权限。
-- **需要下架已发布的问题插件**：找杨鹏协助。
+- **找不到审核页面权限**：联系插件审核管理员开通 admin 插件审核权限。
+- **需要下架已发布的问题插件**：联系平台负责人协助。
 - **`--run` 报"未找到顶栏插件入口"**：当前 CDP 打开的页面不是 dev 画布 `/file/:id` 页，或页面还没加载完；确认浏览器已打开 dev.mastergo.com 的 /file 页。
 - **`--run` 报"未找到运行线上插件菜单项"**：当前不是 dev 环境（生产环境无此入口）；确认是 dev.mastergo.com。
 - **`--run` 报"失焦后未生成插件运行图标"**：粘贴的 JSON 不是审核行对象（`JSON.parse` 失败或字段缺失）；用 `--prepare` 重新生成。
