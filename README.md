@@ -126,7 +126,9 @@ SANITIZE_EXTRA_PATTERNS=scripts/.sanitize-local.txt scripts/check-public-sanitiz
 ```
 
 `scripts/.sanitize-local.txt` 已在 `.gitignore` 中，按行写内部专有词（`#` 开头为注释），
-例如内部仓库名、内部人名、内部域名、公司邮箱等。**提交前建议本地跑一次带扩展清单的检查**。
+例如内部仓库名、内部人名、内部域名、公司邮箱等。**未设置环境变量时会自动加载该文件**；
+文件不存在时词表检查被跳过并给出醒目提示——反向同步前务必确认词表在位（正本另存于内部
+私有仓库，避免单机丢失）。
 
 若某处**故意**需要展示「不该出现的形态」作为示例（本例即如此），在该行末尾加标记
 `sanitize:allow`（推荐用 HTML 注释 `<!-- sanitize:allow -->` 承载，渲染时不可见），该行会被跳过。

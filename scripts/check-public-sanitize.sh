@@ -54,19 +54,29 @@ for pattern in "${GENERIC_PATTERNS[@]}"; do
 done
 
 if [ -n "${SANITIZE_EXTRA_PATTERNS:-}" ]; then
-  if [ ! -f "$SANITIZE_EXTRA_PATTERNS" ]; then
-    printf '\n[跳过] SANITIZE_EXTRA_PATTERNS 指向的文件不存在: %s\n' "$SANITIZE_EXTRA_PATTERNS"
+  EXTRA="$SANITIZE_EXTRA_PATTERNS"
+elif [ -f "scripts/.sanitize-local.txt" ]; then
+  # 默认回退：不设环境变量也自动启用本地词表（文件被 .gitignore，各机器自行维护）
+  EXTRA="scripts/.sanitize-local.txt"
+else
+  EXTRA=""
+fi
+
+if [ -n "$EXTRA" ]; then
+  if [ ! -f "$EXTRA" ]; then
+    printf '\n[跳过] 扩展词表不存在: %s\n' "$EXTRA"
   else
-    printf '扫描本地扩展规则: %s\n' "$SANITIZE_EXTRA_PATTERNS"
+    printf '扫描内部专有词表: %s\n' "$EXTRA"
     while IFS= read -r line || [ -n "$line" ]; do
       case "$line" in
         '' | '#'*) continue ;;
       esac
-      scan_one "$line" "本地规则: $line"
-    done < "$SANITIZE_EXTRA_PATTERNS"
+      scan_one "$line" "内部专有词: $line"
+    done < "$EXTRA"
   fi
 else
-  printf '未设置 SANITIZE_EXTRA_PATTERNS，跳过内部专有词检查（建议本地补跑）。\n'
+  printf '⚠️  无内部专有词表（scripts/.sanitize-local.txt 不存在），词表检查被跳过。\n'
+  printf '    反向同步前务必补上词表——通用模式抓不住内部仓库名/服务名。\n'
 fi
 
 if [ "$fail" -ne 0 ]; then
