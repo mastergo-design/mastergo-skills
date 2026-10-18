@@ -1,7 +1,7 @@
 ---
 name: mastergo-plugin-develop
 description: MasterGo 插件开发与 API 维护一体化 skill。覆盖两类场景：(A) 插件开发——从零创建插件项目结构、mg 全局 API 参考、节点类型、自动布局(flexMode)、组件/样式/团队库/字体/图片、DevMode 代码生成、UI 通信、调试与最佳实践；(B) 插件 API 变更同步——当 API 新增/修改/废弃时，按顺序跨三仓库更新 plugin-typings 类型发布 + mastergo-plugin-docs 开发者文档 + master-internal-plugins E2E 单测。触发词：mastergo 插件开发、插件 API、plugin api update、更新插件类型、更新插件文档、补充插件单测、同步插件 API、插件 API 变更、devmode 代码生成、mg.createFrame、flexMode 自动布局；插件审核、审核插件、处理插件审核、plugin audit、运行线上插件验证、插件合规审查。
-version: 0.9.1
+version: 0.9.2
 ---
 
 # MasterGo 插件开发与 API 维护
@@ -1027,12 +1027,18 @@ frameA.reactions = [{
 
 **已知缺口**（要让插件做出与 UI 等价的原型连线，至少还缺这些；优先级从高到低）：
 
-1. **连线与交互无绑定字段**（阻塞）：引擎 `InteractionItem` / `CppReaction` 都没有 connectorId，插件建的线是「死线」——删线不删交互、删交互不删线。需引擎侧互存 id，再暴露 `connector.reaction` / `Reaction.connectorId`。
-2. **缺原子创建 API**：现需 `createConnector` + 两次 `setConnectorEndPoint` + `addPrototypeProps` 四步、四条命令、中间态会闪。建议 `mg.createConnector({ start, end, reaction })`。
-3. **reaction 无 id**：`CppReaction.id` 引擎有但未暴露（cBridge 也有 `getReactionById`），导致只能整体覆盖，无法增删改单条。
-4. **overlay（浮层）读写全丢**：`cppReationToPluginReation` 里 overlay 转换整段被注释（utils.ts ~207），`pluginReactionsToCppReactions` 也不转 → 浮层位置/遮罩/点击外部关闭在插件侧既读不到也写不了。
-5. **`reactions` 没进 apiConfig**：无 schema 校验、无 `disabledWhenReadOnly`，只读/DevMode 下仍可写（其他写操作走 `pluginDecorator(_, true)`）。
-6. 缺 `startNode` / `endNode` 直接引用（现在只有 `endpointNodeId`，要再 `getNodeById`）；缺 `connector.detach()`；`Navigation` 插件侧缺 `'SWAP_OVERLAY'`；页面级 flow/流程数据（`getCurrentPageFlows` / `getLayerPrototype`）未暴露给插件。
+1. **连线与交互无绑定字段**（阻塞，且是唯一需要引擎侧改造的一条）：连线（connector）与原型交互（reaction）之间没有互相引用的 id，插件建的线是「死线」——删线不删交互、删交互不删线，与 UI 拉出的线不等价。需引擎侧互存 id，再暴露 `connector.reaction` / `Reaction.connectorId`。
+2. **缺原子创建 API**：现需 `createConnector` + 两次 `setConnectorEndPoint` + `addPrototypeProps` 四步、四条命令、中间态会闪，顺序写错出半成品。建议 `mg.createConnector({ start, end, reaction })` 一次落库。
+3. **reaction 无 id，只能整体覆盖**：交互项在引擎侧有 id 但未暴露给插件 API，插件读写 reactions 时只能以数组下标定位，因此只能「先全删再重建」整体覆盖，无法对单条交互做增删改。→ 后续应暴露 id，并提供 `addReaction()` / `updateReaction(id, patch)` / `removeReaction(id)`。
+4. **overlay（浮层）暂不可通过插件 API 读写**：浮层位置 / 遮罩 / 点击外部关闭等属性不在交互数据上，而是**节点级**属性（与 Figma 一致，挂在 frame 上：`overlayPositionType` / `overlayBackgroundType` / `overlayBackgroundInteraction`）。插件 API 尚未暴露这三个节点属性，建议按节点级属性补齐，而不是挂在 reaction 上。
+5. **`reactions` 未做类型校验**：`reactions` 的 setter 没有登记 schema 校验（写入脏值不会在赋值时报错）；只读/DevMode 门禁本身是生效的。
+6. **引擎已支持但插件 API 未暴露的一批能力**（补 API 不需要引擎配合）：
+   - 连线文字位置（`connectorTextMidpoint`：可设在连线中段偏起点/偏终点）。
+   - 端点吸附只有 4 个 magnet（上/右/下/左），无「自动/中心」，吸附后不能给相对偏移。
+   - 缺 `connector.startNode` / `endNode` 直接引用（现在只有 `endpointNodeId`，要再 `getNodeById`）；`attachedConnectors` 只有 getter，缺 `connector.detach()`。
+   - `Navigation` 枚举缺 `'SWAP_OVERLAY'`。
+   - 页面级 flow/流程数据（起点的增删改排序与查询）未暴露给插件；插件也没有 `findAll` / `findOne`，拿不到「本页有哪些流程/起点」。
+7. **`reactions` 只适合整体覆盖**：回写时交互项以数组下标定位，所以 setter 只适合整体覆盖；要做单条增删改需要引擎接受真实 id 或维护稳定的 index。
 
 改这条链路时要同步的源码：
 

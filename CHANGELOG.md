@@ -1,5 +1,12 @@
 # Changelog
 
+## [2026-09-23] v1.0.4
+- `skills/plugin-develop` v0.9.1 → v0.9.2，修正并充实第 18 节「已知缺口」清单（逐条对照引擎与运行时行为复核，只保留面向插件开发者的 API 层结论）：
+  - **修正**：`reactions` 的只读 / DevMode 门禁其实**没有漏**——未登记 schema 的属性默认按只读拦截处理；真实缺口只是缺 setter 的类型校验
+  - **修正**：`overlay`（浮层）不在 interaction 上，而是**节点级**属性（`overlayPositionType` / `overlayBackgroundType` / `overlayBackgroundInteraction`，与 Figma 同款）；旧表述「overlay 转换被注释导致读写全丢」属判断错误
+  - **补充**：reaction 在引擎侧有 id、支持按 id 删除，因此补 `removeReaction(id)` 不需要引擎配合，根因是插件侧回写只按数组下标定位；并补充 `connectorTextMidpoint`、`Navigation` 缺 `SWAP_OVERLAY`、页面级 flow 数据未暴露、插件缺 `findAll` / `findOne` 等缺口
+  - **删除**：不属于 skill 使用者的内部实现细节（内部源码路径与行号、引擎命令契约、内部改造待办清单）不再进入公开仓库
+
 ## [2026-09-23] v1.0.3
 - `skills/plugin-develop` v0.9.0 → v0.9.1，从内部 `mastergo-plugin` skill 反向同步：
   - 新增 **第 18 节「连接线 / 原型连线（ConnectorNode）」**：`mg.createConnector()`、端点 `connectorStart/End`（自由端点 vs 吸附 `endpointNodeId` + `magnet`）、`connectorStart/EndStrokeCap`、`text` / `createText()`、`attachedConnectors`，并明确「连线与 `reactions` 是两套互不关联的 API」+ 列出已知缺口
