@@ -1,5 +1,13 @@
 # Changelog
 
+## [2026-10-18] v1.0.7
+- 新增**公开仓库脱敏门禁**，防止内部信息再次同步进公开仓库：
+  - `scripts/check-public-sanitize.sh`：扫描通用敏感形态（本机绝对路径、个人代码目录惯例、`文件:行号` 源码引用），命中即退出 1；支持 `SANITIZE_EXTRA_PATTERNS` 指向**不提交**的本地清单，用于叠加内部专有词（内部仓库名 / 人名 / 域名 / 公司邮箱）
+  - `.github/workflows/public-sanitize.yml`：在 `pull_request` 与 `push` 到 `main` 时自动运行上述脚本
+  - `README.md` 新增《公开仓库内容边界（脱敏清单）》：明确「可保留 / 必须移除」两类内容与本地自查方式
+  - 新增 `.gitignore`：忽略 `scripts/.sanitize-local.txt` 等本地清单与常见系统产物
+- 本版本不改变任何 skill 内容
+
 ## [2026-09-23] v1.0.6
 - `skills/plugin-develop` v0.9.3 → v0.9.4，**公开仓库脱敏**：移除不属于 skill 使用者的内部信息
   - 第 18 节「已知缺口」重写为面向插件开发者的 API 层结论；移除内部源码路径与行号引用、引擎命令契约（内部命令名 / 枚举值 / payload 形态）、内部改造待办清单，这三类只在内部 skill `mastergo-plugin` 维护
